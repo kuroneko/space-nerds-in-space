@@ -1,17 +1,29 @@
 cmake_minimum_required(VERSION 3.20)
 project(SNIS LANGUAGES C)
 
+option(SNIS_INSTALL_UTILS "Install Utilities" ON)
 option(SNIS_WITH_VOICE_CHAT "Enable Voice Chat Support" ON)
 set(SNIS_DATA_DIR "${CMAKE_INSTALL_PREFIX}/share/snis" CACHE PATH "SNIS Data Directory")
 
 find_package(SDL2 REQUIRED)
 find_package(PNG REQUIRED)
 find_package(Lua REQUIRED)
+if(Lua_FOUND AND NOT TARGET Lua::Lua)
+  add_library(Lua::Lua INTERFACE IMPORTED)
+  set_target_properties(
+    Lua::Lua
+    PROPERTIES
+      INTERFACE_INCLUDE_DIRECTORIES "${LUA_INCLUDE_DIR}"
+      INTERFACE_LINK_LIBRARIES "${LUA_LIBRARIES}"
+  )
+endif()
+find_package(OpenSSL COMPONENTS Crypto REQUIRED)
 
 include(FindPkgConfig)
-pkg_check_modules(xcrypt REQUIRED libxcrypt)
-pkg_check_modules(vorbisfile REQUIRED vorbisfile)
-pkg_check_modules(portaudio REQUIRED portaudio-2.0)
+pkg_check_modules(xcrypt REQUIRED IMPORTED_TARGET libxcrypt)
+pkg_check_modules(vorbisfile REQUIRED IMPORTED_TARGET vorbisfile)
+pkg_check_modules(portaudio REQUIRED IMPORTED_TARGET portaudio-2.0)
+pkg_check_modules(curl REQUIRED IMPORTED_TARGET libcurl)
 
 if(SNIS_WITH_VOICE_CHAT)
 	pkg_check_modules(opus REQUIRED opus)
@@ -26,8 +38,9 @@ add_subdirectory(ssgl)
 add_library(glad STATIC extern/glad/src/gl.c)
 target_include_directories(glad PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/extern/glad/include>)
 
-# so many of SNIS's bits assume this'll be set, just use ACD to set it.
-add_compile_definitions(PREFIX=${CMAKE_INSTALL_PREFIX})
+# so many of SNIS's bits assume these will be set, just use add_compile_definitions to set it.
+add_compile_definitions(PREFIX="${CMAKE_INSTALL_PREFIX}")
+add_compile_definitions(DATADIR="${SNIS_DATA_DIR}")
 
 add_library(sniscommon OBJECT
 	arbitrary_spin.c
@@ -77,6 +90,7 @@ add_library(snisclientcommon OBJECT
 	material.c
 	matrix.c
 	my_point.c
+	ogg_to_pcm.c
 	oriented_bounding_box.c
 	pronunciation.c
 	quat.c
@@ -106,29 +120,30 @@ add_library(snisclientcommon OBJECT
 	ui_colors.c
 	vec4.c
 	workqueue.c
+	wwviaudio.c
 	xdg_base_dir_spec.c)
 target_link_libraries(snisclientcommon PUBLIC sniscommon)
 target_include_directories(snisclientcommon PUBLIC ${opus_INCLUDE_DIRS})
 target_link_libraries(snisclientcommon PUBLIC sniscommon ${opus_LIBRARIES} SDL2::SDL2)
 
 add_executable(snis_client
-	joystick_config.c
-	ogg_to_pcm.c
-	snis_client.c
-	wwviaudio.c
-
-	# SDL objs
 	graph_dev_opengl.c
+	joystick_config.c
 	opengl_cap.c
 	png_utils.c
 	shader.c
-	snis_graph.c
+    snis_client.c
+   	snis_graph.c	
 	snis_xwindows_hacks.c
-	turret_aimer.c
 )
 target_compile_definitions(snis_client PRIVATE DATADIR="${SNIS_DATA_DIR}")
-target_include_directories(snis_client PRIVATE ${vorbisfile_INCLUDE_DIRS} ${portaudio_INCLUDE_DIRS} ${PNG_INCLUDE_DIRS})
-target_link_libraries(snis_client PRIVATE snisclientcommon sniscommon ssglclient ${vorbisfile_LIBRARIES} ${portaudio_LIBRARIES} ${PNG_LIBRARIES} glad SDL2::SDL2main)
+target_link_libraries(snis_client PRIVATE
+	 snisclientcommon sniscommon ssglclient
+	 PkgConfig::vorbisfile
+	 PkgConfig::portaudio
+	 PNG::PNG
+	 glad
+	 SDL2::SDL2main)
 
 add_executable(snis_server
 	snis_server.c
@@ -159,8 +174,7 @@ add_executable(snis_server
 	ship_registration.c
 	talking_stick.c
 	transport_contract.c)
-target_include_directories(snis_server PRIVATE ${LUA_INCLUDE_DIR} ${xcrypt_INCLUDE_DIRS})
-target_link_libraries(snis_server PUBLIC sniscommon ssglclient ${LUA_LIBRARIES} ${xcrypt_LIBRARIES})
+target_link_libraries(snis_server PUBLIC sniscommon ssglclient Lua::Lua PkgConfig::xcrypt)
 
 add_executable(snis_multiverse
 	snis_multiverse.c
@@ -183,8 +197,7 @@ add_executable(snis_multiverse
 	snis_licenses.c
 	net_utils.c
 	commodities.c)
-target_include_directories(snis_multiverse PRIVATE ${xcrypt_INCLUDE_DIRS})
-target_link_libraries(snis_multiverse PUBLIC ssglclient ${xcrypt_LIBRARIES} ${MATH_LIBRARY})
+target_link_libraries(snis_multiverse PUBLIC ssglclient PkgConfig::xcrypt ${MATH_LIBRARY})
 
 add_executable(snis_arduino
 	snis_arduino.c
@@ -192,13 +205,140 @@ add_executable(snis_arduino
 	string-utils.c
 )
 
-# snis_update_assets
-# mesh_viewer
-# mask_clouds
+add_executable(snis_update_assets
+	util/snis_update_assets.c
+	string-utils.c
+	util/progress_image.h
+)
+target_link_libraries(snis_update_assets PRIVATE
+	SDL2::SDL2 SDL2::SDL2main
+	OpenSSL::Crypto
+	PkgConfig::curl)
 
 configure_file(snis_launcher.tmpl ${CMAKE_CURRENT_BINARY_DIR}/snis_launcher @ONLY NEWLINE_STYLE UNIX)
+configure_file(util/update_assets_from_launcher.sh.tmpl ${CMAKE_CURRENT_BINARY_DIR}/update_assets_from_launcher.sh @ONLY NEWLINE_STYLE UNIX)
 
-install(TARGETS snis_server snis_client snis_multiverse snis_arduino)
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/snis_launcher DESTINATION ${CMAKE_INSTALL_PREFIX}/bin
+if(SNIS_INSTALL_UTILS)
+	add_executable(mesh_viewer
+		shader.c
+		graph_dev_opengl.c
+		opengl_cap.c
+		snis_graph.c
+		png_utils.c
+		turret_aimer.c
+		quat.c
+		mathutils.c
+		mesh.c
+		mtwist.c
+		material.c
+		entity.c
+		snis_alloc.c
+		matrix.c
+		stacktrace.c
+		stl_parser.c
+		snis_typeface.c
+		snis_font.c
+		string-utils.c
+		ui_colors.c
+		liang-barsky.c
+		bline.c
+		vec4.c
+		open-simplex-noise.c
+		replacement_assets.c
+		snis_xwindows_hacks.c
+		workqueue.c
+		pthread_util.c
+		mikktspace/mikktspace.c
+
+		mesh_viewer.c)
+	target_link_libraries(mesh_viewer PRIVATE
+		glad PNG::PNG SDL2::SDL2 SDL2::SDL2main
+		${MATH_LIBRARY})
+
+	# mask_clouds
+	add_executable(mask_clouds 
+		util/mask_clouds.c
+		png_utils.c)
+	target_link_libraries(mask_clouds PRIVATE PNG::PNG)
+
+	add_executable(cloud-mask-normalmap
+		util/cloud-mask-normalmap.c
+		png_utils.c)
+	target_link_libraries(cloud-mask-normalmap PRIVATE PNG::PNG)
+
+	add_executable(sample_image_colors
+		util/sample_image_colors.c
+		png_utils.c)
+	target_link_libraries(sample_image_colors PRIVATE PNG::PNG)
+
+	add_executable(generate_solarsystem_positions
+		util/generate_solarsystem_positions.c
+		string-utils.c)
+	target_link_libraries(generate_solarsystem_positions PRIVATE ${MATH_LIBRARY})
+
+	add_executable(nebula_noise
+		nebula_noise.c
+		open-simplex-noise.c
+		png_utils.c)
+	target_link_libraries(nebula_noise PRIVATE
+		PNG::PNG
+		${MATH_LIBRARY})
+
+	add_executable(generate_skybox
+		generate_skybox.c
+		open-simplex-noise.c
+		png_utils.c
+		mathutils.c
+		quat.c
+		mtwist.c)
+	target_link_libraries(generate_skybox PRIVATE
+		PNG::PNG
+		${MATH_LIBRARY})
+
+	add_executable(earthlike
+		earthlike.c
+		mtwist.c
+		mathutils.c
+		quat.c
+		open-simplex-noise.c
+		png_utils.c
+		crater.c
+		pthread_util.c)
+	target_link_libraries(earthlike PRIVATE
+		PNG::PNG
+		${MATH_LIBRARY})
+endif()
+
+
+# Install binaries and scripts
+install(TARGETS snis_server snis_client snis_multiverse snis_arduino snis_update_assets)
+install(FILES 
+	${CMAKE_CURRENT_BINARY_DIR}/snis_launcher
+	${CMAKE_CURRENT_BINARY_DIR}/update_assets_from_launcher.sh
+	DESTINATION ./bin
 	PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
 )
+
+if(SNIS_INSTALL_UTILS)
+	install(TARGETS mesh_viewer mask_clouds cloud-mask-normalmap sample_image_colors 
+		generate_solarsystem_positions nebula_noise generate_skybox earthlike)
+endif()
+
+# Install data
+install(FILES
+	man/snis_client.6
+	man/snis_server.6
+	man/snis_text_to_speech.sh.6
+	ssgl/ssgl_server.6
+	man/snis_multiverse.6
+	man/snis_update_assets.6
+	DESTINATION ./man/man6
+	PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ)
+install(FILES
+	man/earthlike.1
+	man/snis_test_audio.1
+	man/lsssgl.1
+	DESTINATION ./man/man1
+	PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ)
+install(SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/cmake/install_snis_data.cmake)
+

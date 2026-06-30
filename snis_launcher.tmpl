@@ -41,7 +41,7 @@ then
 	fi
 fi
 
-SNIS_ASSET_DIR_ROOT="$(echo "$SNIS_ASSET_DIR" | sed -e 's/[/]share[/]snis$//')"
+SNIS_ASSET_DIR_ROOT="${SNIS_ASSET_DIR/%\/share\/snis/}"
 if [ "${SNIS_ASSET_DIR_ROOT}" = "${SNIS_ASSET_DIR}" ]; then
 	echo "Error: SNIS_ASSET_DIR must end with /share/snis" 1>&2
 	echo "Current value of SNIS_ASSET_DIR is $SNIS_ASSET_DIR" 1>&2
@@ -87,8 +87,10 @@ LOBBYHOST=localhost
 # ASPECT_RATIO="4:3"
 # ASPECT_RATIO="16:10"
 # ASPECT_RATIO="16:9"
-TRAP_NANS=
-# TRAP_NANS=--trap-nans
+declare -a TRAP_NANS ASPECT_RATIO_ARG
+TRAP_NANS=()
+ASPECT_RATIO_ARG=()
+# TRAP_NANS=("--trap-nans")
 SPLASH_SCREEN="ENABLED"
 
 # change to --no-textures to run without textures
@@ -100,9 +102,7 @@ ENABLE_ENSCRIPT=
 
 if [ "$ASPECT_RATIO" != "" ]
 then
-	ASPECT_RATIO_ARG="--aspect-ratio $ASPECT_RATIO"
-else
-	ASPECT_RATIO_ARG=""
+	ASPECT_RATIO_ARG+=("--aspect-ratio" "$ASPECT_RATIO")
 fi
 
 SOLARSYSTEM_NAME="default"
@@ -266,9 +266,10 @@ start_snis_lobby()
 start_snis_multiverse()
 {
 	local autowrangle=
-	declare -a exempt
+	declare -a exempt PORT_RANGE_OPT
 
 	exempt=()
+	PORT_RANGE_OPT=()
 
 	if ! check_for_binary "${SNIS_MULTIVERSE}"
 	then
@@ -276,9 +277,7 @@ start_snis_multiverse()
 	fi
 	if [ "$SNIS_SERVER_PORT_RANGE" != "" ]
 	then
-		PORT_RANGE_OPT="--snis-server-portrange $SNIS_SERVER_PORT_RANGE"
-	else
-		PORT_RANGE_OPT=""
+		PORT_RANGE_OPT+=("--snis-server-portrange" "${SNIS_SERVER_PORT_RANGE}")
 	fi
 	printf "Automatically start/stop snis_server instances as needed (y/n, default = y)?"
 	read -r x
@@ -311,8 +310,8 @@ start_snis_multiverse()
 	fi
 	check_for_unexpected_lockdir /tmp/snis_multiverse_lock snis_multiverse
 	("${SNIS_MULTIVERSE}" $autowrangle -l "${LOBBYHOST}" -n nickname -L narnia "${exempt[@]}" \
-		$PORT_RANGE_OPT > "$SNIS_LOG_DIR"/snis_multiverse_log.txt 2>&1 ; \
-		printf "snis_multiverse died, status was %s\n" "$?" 1>&2 ) &
+		"${PORT_RANGE_OPT[@]}" > "${SNIS_LOG_DIR}/snis_multiverse_log.txt" 2>&1 ; \
+		printf "snis_multiverse died, status was %d\n" "$?" 1>&2 ) &
 }
 
 get_solarsystem_name()
@@ -362,11 +361,12 @@ start_snis_server()
 		return
 	fi
 
+	declare -a PORT_RANGE_OPT
+	PORT_RANGE_OPT=()
+
 	if [ "$SNIS_SERVER_PORT_RANGE" != "" ]
 	then
-		PORT_RANGE_OPT="--portrange $SNIS_SERVER_PORT_RANGE"
-	else
-		PORT_RANGE_OPT=""
+		PORT_RANGE_OPT+=("--portrange" "${SNIS_SERVER_PORT_RANGE}")
 	fi
 	printf "\nStarting snis_server\n\n"
 	get_solarsystem_name
@@ -375,7 +375,7 @@ start_snis_server()
 	UPPER_SS1=$(uppercase "$SS1")
 	check_for_unexpected_lockdir /tmp/snis_server_lock."$UPPER_SS1" "snis_server $SS1"
 	${SNIS_SERVER} -l "${LOBBYHOST}" -L "$UPPER_SS1" -m narnia -s "$SS1" \
-		${ENABLE_ENSCRIPT} ${TRAP_NANS} ${PORT_RANGE_OPT} > \
+		${ENABLE_ENSCRIPT} "${TRAP_NANS[@]}" "${PORT_RANGE_OPT[@]}" > \
 		"$SNIS_LOG_DIR"/snis_server_log.txt 2>&1 &
 	sleep 2.5
 }
@@ -394,8 +394,8 @@ start_snis_client()
 		SPLASH_SCREEN_OPTION=""
 	fi
 	CLIENT="$1"
-	${CLIENT} --lobbyhost "${LOBBYHOST}" $ASPECT_RATIO_ARG --fullscreen --no-launcher \
-		${TRAP_NANS} ${SPLASH_SCREEN_OPTION} ${NO_TEXTURES} > "$SNIS_LOG_DIR"/snis_client_log.txt 2>&1 &
+	"${CLIENT}" --lobbyhost "${LOBBYHOST}" "${ASPECT_RATIO_ARG[@]}" --fullscreen --no-launcher \
+		"${TRAP_NANS[@]}" ${SPLASH_SCREEN_OPTION} ${NO_TEXTURES} > "$SNIS_LOG_DIR"/snis_client_log.txt 2>&1 &
 	sleep 1
 	# --starship "$shipname" --pw "$password" $@
 }

@@ -21,8 +21,8 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <errno.h>
-#include <strings.h>
 #include <math.h>
 
 #include "png_utils.h"
