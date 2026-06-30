@@ -315,7 +315,7 @@ install(TARGETS snis_server snis_client snis_multiverse snis_arduino snis_update
 install(FILES 
 	${CMAKE_CURRENT_BINARY_DIR}/snis_launcher
 	${CMAKE_CURRENT_BINARY_DIR}/update_assets_from_launcher.sh
-	DESTINATION ./bin
+	DESTINATION bin
 	PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
 )
 
@@ -332,13 +332,13 @@ install(FILES
 	ssgl/ssgl_server.6
 	man/snis_multiverse.6
 	man/snis_update_assets.6
-	DESTINATION ./man/man6
+	DESTINATION man/man6
 	PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ)
 install(FILES
 	man/earthlike.1
 	man/snis_test_audio.1
 	man/lsssgl.1
-	DESTINATION ./man/man1
+	DESTINATION man/man1
 	PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ)
 install(SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/cmake/install_snis_data.cmake)
 
