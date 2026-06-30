@@ -3,7 +3,6 @@ project(SNIS LANGUAGES C)
 
 option(SNIS_INSTALL_UTILS "Install Utilities" ON)
 option(SNIS_WITH_VOICE_CHAT "Enable Voice Chat Support" ON)
-set(SNIS_DATA_DIR "${CMAKE_INSTALL_PREFIX}/share/snis" CACHE PATH "SNIS Data Directory")
 
 find_package(SDL2 REQUIRED)
 find_package(PNG REQUIRED)
@@ -39,7 +38,8 @@ add_library(glad STATIC extern/glad/src/gl.c)
 target_include_directories(glad PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/extern/glad/include>)
 
 # so many of SNIS's bits assume these will be set, just use add_compile_definitions to set it.
-add_compile_definitions(PREFIX="${CMAKE_INSTALL_PREFIX}")
+add_compile_definitions(PREFIX=${CMAKE_INSTALL_PREFIX})
+set(SNIS_DATA_DIR "${CMAKE_INSTALL_PREFIX}/share/snis")
 add_compile_definitions(DATADIR="${SNIS_DATA_DIR}")
 
 add_library(sniscommon OBJECT
@@ -136,7 +136,7 @@ add_executable(snis_client
    	snis_graph.c	
 	snis_xwindows_hacks.c
 )
-target_compile_definitions(snis_client PRIVATE DATADIR="${SNIS_DATA_DIR}")
+#target_compile_definitions(snis_client PRIVATE DATADIR="${SNIS_DATA_DIR}")
 target_link_libraries(snis_client PRIVATE
 	 snisclientcommon sniscommon ssglclient
 	 PkgConfig::vorbisfile

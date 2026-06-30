@@ -20,13 +20,9 @@ then
 fi
 export SNIS_DB_DIR
 
-# Hack this in for now.  Note: the Makefile edits the next two lines with sed
-# so be careful if you change it that the Makefile still edits it correctly.
-# Currently it matches the pattern: '^PREFIX=[.]$' and '^DESTDIR=$'
 PREFIX='@CMAKE_INSTALL_PREFIX@'
-DESTDIR=''
 
-BINDIR="${DESTDIR}${PREFIX}/bin"
+BINDIR="${PREFIX}/bin"
 if [ "$SNIS_ASSET_DIR" = "" ]
 then
 	if [ "$XDG_DATA_HOME" = "" ]
@@ -643,11 +639,11 @@ check_for_asset_updates()
 
 	# copy local assets first
 	echo "Updating local assets..."
-	echo "Changing to ${DESTDIR}${PREFIX}"
+	echo "Changing to ${PREFIX}"
 	
-	if ! cd "${DESTDIR}${PREFIX}"
+	if ! cd "${PREFIX}"
 	then
-		echo "Failed to cd to ${DESTDIR}${PREFIX}" 1>&2
+		echo "Failed to cd to ${PREFIX}" 1>&2
 		return
 	fi
 
