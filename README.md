@@ -47,8 +47,49 @@ Here is documentation for the
 [Lua scripting API](https://github.com/smcameron/space-nerds-in-space/blob/master/doc/lua-api.txt)
 intended to be used for creating "mission scripts".
 
+## Branch specific changes
 
-# Build Instructions
+* various fix-ups in the deployed scripts and installation mechansim
+  * most of the installed shell scripts now pass shellcheck and are correctly associated with bash rather than /bin/sh (which can be a more basic bourne shell)
+  * the DESTDIR envvar is no longer encoded anywhere.  It never should have been.  It's strictly an override for packaging tools to force the install to install binaries in an alterate root.
+
+* Assert GL3.1
+  - GL2.x is hazardous for your performance as it needs to do things in a way that interoperates with the "Fixed Function Pipeline", even if you don't touch those bits.
+  - GL3.2 Core would have been better, but the Pi5 claims it doesn't support it, but only supports 3.1 at best.  That said, 3.1 is essentially Core as it is due to the removal of 3.0's deprecated APIs.
+  - this does rule out the Pi4 for now, but I intend to add a specific ES renderer which I expect will perform much better than the GL renderer on Pi5 and Pi4 both.
+
+* Migrate to Glad2.
+  - makes it easier to catch attempts to hit the deprecated/compatibility parts of OpenGL.
+
+* Migrate to CMake.
+  - makes it easier to target non-Linux.
+
+## Build Instructions
+
+CC: This is not strictly correct for this tree as my tree uses cmake to
+    build and deploy and has deployment related fixes.  (ie: no embedding
+    of DESTDIR)
+
+The 5 second version:
+```
+mkdir build
+cd build
+cmake -GNinja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_INSTALL_PREFIX=/opt/snis ..
+cmake --build .
+
+# optionally, to install:
+cmake --install .
+```
+
+CMake will look for external dependences via `pkg-config` and other standardish mechanisms.
+
+This will build everything (including the utilities) and install them.
+
+This needs to be installed at least once before it can be run from the build tree directly (the binaries will look to the install prefix for shared data)
+
+The CMake build system doesn't yet build models, so the original Makefile has been retained for that purpose.
+
+# Build Instructions (Old)
 
 Here's a quick preview of the build instructions detailed below:
 
