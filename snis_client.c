@@ -26036,14 +26036,18 @@ int main(int argc, char *argv[])
 	SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 5);
 	SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 5);
 	SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 5);
-	/* SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 16); */
+	SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 16);
 	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
 	SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 0);
 	SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 0);
+	SDL_GL_SetAttribute(SDL_GL_FRAMEBUFFER_SRGB_CAPABLE, 1);
 
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+	/* there is no core profile before GL 3.2 per se, but VC4 claims it does 3.1 */
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+	/* allow context upgrading (macOS, etc) */
+	// SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG);
 
 	SDL_Window *window = SDL_CreateWindow("Space Nerds in Space",
 		SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
@@ -26054,6 +26058,10 @@ int main(int argc, char *argv[])
 	}
 	update_splash_progress(12);
 	SDL_GLContext gl_context = SDL_GL_CreateContext(window);
+	if (NULL == gl_context) {
+		fprintf(stderr, "Couldn't create OpenGL Context: %s\n", SDL_GetError());
+		exit(1);
+	}
 	(void) gl_context;
 	setup_screen_parameters(window);
 	SDL_SetWindowSize(window, (int) (0.8 * SCREEN_WIDTH), (int) (0.8 * SCREEN_HEIGHT));

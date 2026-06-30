@@ -8,7 +8,7 @@
 #include <limits.h>
 #include <getopt.h>
 #include <locale.h>
-#include <GL/glew.h>
+#include <glad/gl.h>
 
 #ifdef __APPLE__
 #include <SDL2.h>

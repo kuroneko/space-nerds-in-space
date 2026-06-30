@@ -1,12 +1,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <GL/glew.h>
 #include <math.h>
 #include <assert.h>
 #include <sys/stat.h>
 #include <limits.h>
 #include <pthread.h>
+
+#include <glad/gl.h>
+#include <SDL.h>
 
 #include "shader.h"
 #include "vertex.h"
@@ -27,7 +29,7 @@
 #include "png_utils.h"
 #include "workqueue.h"
 
-#define OPENGL_VERSION_STRING "#version 120\n"
+#define OPENGL_VERSION_STRING "#version 130\n"
 #define UNIVERSAL_SHADER_HEADER \
 	OPENGL_VERSION_STRING
 
@@ -3736,7 +3738,7 @@ static void setup_fs_effect_shader(const char *basename,
 	struct graph_dev_gl_fs_effect_shader *shader)
 {
 	const char *vert_header =
-		OPENGL_VERSION_STRING
+		OPENGL_VERSION_STRING\
 		"#define INCLUDE_VS 1\n";
 	const char *frag_header =
 		OPENGL_VERSION_STRING
@@ -3776,26 +3778,14 @@ static void setup_smaa_effect_shader(const char *basename, struct graph_dev_gl_f
 
 	const char *vert_header;
 	const char *frag_header;
-	if (GLEW_VERSION_3_0) {
-		vert_header =
-			"#version 130\n"
-			"#define INCLUDE_VS 1\n"
-			"#define SMAA_GLSL_3\n";
-		frag_header =
-			"#version 130\n"
-			"#define INCLUDE_FS 1\n"
-			"#define SMAA_GLSL_3\n";
-	} else {
-		/* fall back to OGL 2.1 */
-		vert_header =
-			"#version 120\n"
-			"#define INCLUDE_VS 1\n"
-			"#define SMAA_GLSL_2\n";
-		frag_header =
-			"#version 120\n"
-			"#define INCLUDE_FS 1\n"
-			"#define SMAA_GLSL_2\n";
-	}
+	vert_header =
+		"#version 130\n"
+		"#define INCLUDE_VS 1\n"
+		"#define SMAA_GLSL_3\n";
+	frag_header =
+		"#version 130\n"
+		"#define INCLUDE_FS 1\n"
+		"#define SMAA_GLSL_3\n";
 
 	const char *filenames[] = { "smaa-high.shader", "SMAA.hlsl", shader_filename };
 
@@ -3867,8 +3857,8 @@ static void setup_smaa_effect(struct graph_dev_smaa_effect *effect)
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE8_ALPHA8, (GLsizei)AREATEX_WIDTH, (GLsizei)AREATEX_HEIGHT, 0,
-		GL_LUMINANCE_ALPHA, GL_UNSIGNED_BYTE, areaTexBytes);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RG8, (GLsizei)AREATEX_WIDTH, (GLsizei)AREATEX_HEIGHT, 0,
+		GL_RG, GL_UNSIGNED_BYTE, areaTexBytes);
 
 	/* include file defines sizes and searchTexBytes of the search texture */
 #include "share/snis/textures/SearchTex.h"
@@ -3879,7 +3869,7 @@ static void setup_smaa_effect(struct graph_dev_smaa_effect *effect)
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, (GLsizei)SEARCHTEX_WIDTH, (GLsizei)SEARCHTEX_HEIGHT, 0,
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, (GLsizei)SEARCHTEX_WIDTH, (GLsizei)SEARCHTEX_HEIGHT, 0,
 		GL_RED, GL_UNSIGNED_BYTE, searchTexBytes);
 
 	glGenFramebuffers(1, &effect->edge_target.fbo);
@@ -4067,21 +4057,16 @@ static void graph_dev_set_up_image_loader_work_queues(void)
 }
 
 int graph_dev_setup(const char *shader_dir)
-{
-	glewExperimental = GL_TRUE; /* OSX apparently needs glewExperimental */
-
-	if (glewInit() != GLEW_OK) {
-		fprintf(stderr, "Failed to initialize GLEW\n");
+{	
+	if (!gladLoadGL((GLADloadfunc)SDL_GL_GetProcAddress)) {
+		fprintf(stderr, "Got error trying to bind GL\n");
 		return -1;
 	}
-	if (!GLEW_VERSION_2_1) {
-		fprintf(stderr, "Need atleast OpenGL 2.1\n");
+	if (!GLAD_GL_VERSION_3_1) {
+		fprintf(stderr, "Need at least OpenGL 3.1\n");
 		return -1;
 	}
-	printf("Initialized GLEW\n");
-
-	if (GLEW_VERSION_3_0)
-		printf("OpenGL 3.0 available\n");
+	printf("Initialized GLAD\n");
 
 	if (framebuffer_srgb_supported())
 		printf("sRGB framebuffer supported\n");
@@ -4182,9 +4167,9 @@ static int cubemap_texture_to_gpu(struct graph_dev_image_load_request *r)
 		char *image_data = r->image_data[i];
 
 		if (r->linear_colorspace)
-			colorspace = r->hasAlpha ? GL_RGBA8 : GL_RGB8;
+			colorspace = r->hasAlpha[i] ? GL_RGBA8 : GL_RGB8;
 		else
-			colorspace = r->hasAlpha ? GL_SRGB8_ALPHA8 : GL_SRGB8;
+			colorspace = r->hasAlpha[i] ? GL_SRGB8_ALPHA8 : GL_SRGB8;
 		glTexImage2D(tex_pos[i], 0, colorspace, r->w[i], r->h[i], 0,
 				(r->hasAlpha[i] ? GL_RGBA : GL_RGB), GL_UNSIGNED_BYTE, image_data);
 	}
