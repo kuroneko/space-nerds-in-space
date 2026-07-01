@@ -20,7 +20,12 @@ endif()
 find_package(OpenSSL COMPONENTS Crypto REQUIRED)
 
 include(FindPkgConfig)
-pkg_check_modules(xcrypt REQUIRED IMPORTED_TARGET libxcrypt)
+if(CMAKE_SYSTEM_NAME MATCHES Linux)
+	pkg_check_modules(xcrypt REQUIRED IMPORTED_TARGET libxcrypt)
+	set(CRYPT_LIB_NAME PkgConfig::xcrypt)
+else()
+	set(CRYPT_LIB_NAME "")
+endif()
 pkg_check_modules(vorbisfile REQUIRED IMPORTED_TARGET vorbisfile)
 pkg_check_modules(portaudio REQUIRED IMPORTED_TARGET portaudio-2.0)
 pkg_check_modules(curl REQUIRED IMPORTED_TARGET libcurl)
@@ -196,7 +201,7 @@ add_executable(snis_server
 	ship_registration.c
 	talking_stick.c
 	transport_contract.c)
-target_link_libraries(snis_server PUBLIC sniscommon ssglclient Lua::Lua PkgConfig::xcrypt)
+target_link_libraries(snis_server PUBLIC sniscommon ssglclient Lua::Lua ${CRYPT_LIB_NAME})
 
 add_executable(snis_multiverse
 	snis_multiverse.c
@@ -219,7 +224,7 @@ add_executable(snis_multiverse
 	snis_licenses.c
 	net_utils.c
 	commodities.c)
-target_link_libraries(snis_multiverse PUBLIC ssglclient PkgConfig::xcrypt ${MATH_LIBRARY})
+target_link_libraries(snis_multiverse PUBLIC ssglclient ${MATH_LIBRARY})
 
 add_executable(snis_arduino
 	snis_arduino.c
