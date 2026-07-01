@@ -32,6 +32,10 @@ endif()
 # Search for the math library 'm'
 find_library(MATH_LIBRARY m)
 
+# build build_info.h - legacy - needs fixing.
+include (cmake/generate_build_info.cmake)
+GenerateBuildInfo()
+
 # included/embeded libraries.
 add_subdirectory(ssgl)
 
@@ -48,6 +52,8 @@ endif()
 add_compile_definitions(PREFIX=${CMAKE_INSTALL_PREFIX})
 set(SNIS_DATA_DIR "${CMAKE_INSTALL_PREFIX}/share/snis")
 add_compile_definitions(DATADIR="${SNIS_DATA_DIR}")
+# also, globally include the shared generated directory where our build_info goes.
+include_directories(${CMAKE_BINARY_DIR}/generated)
 
 # similarly, just splatter USE_GLES over everything if we're targetting GLES.
 if(SNIS_USE_GLES)
