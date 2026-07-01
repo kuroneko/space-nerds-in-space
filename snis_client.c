@@ -111,6 +111,7 @@
 #include "rts_unit_data.h"
 #include "commodities.h"
 #include "scipher.h"
+#include "shader.h"
 
 #include "vertex.h"
 #include "triangle.h"
@@ -25176,6 +25177,8 @@ static struct option long_options[] = {
 	{ "no-launcher", no_argument, NULL, NO_LAUNCHER },
 	{ "NAT-ghetto-mode", no_argument, NULL, 'g' },
 	{ "auto-download-assets", no_argument, NULL, AUTO_DOWNLOAD_ASSETS },
+	{ "abort-on-shader-failure", no_argument, &abort_on_shader_failure, 1 },
+	{ "no-abort-on-shader-failure", no_argument, &abort_on_shader_failure, 0 },
 	{ 0, 0, 0, 0 },
 };
 
