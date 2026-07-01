@@ -108,11 +108,6 @@ static struct loaded_cubemap_texture loaded_cubemap_textures[MAX_LOADED_CUBEMAP_
 
 static int draw_normal_lines = 0;
 static int draw_billboard_wireframe = 0;
-static int draw_msaa_samples = 0;
-static int draw_render_to_texture = 0;
-static int draw_smaa = 0;
-static int draw_smaa_edge = 0;
-static int draw_smaa_blend = 0;
 static int draw_atmospheres = 1;
 static int filmic_tonemapping = 1;
 static float tonemapping_gain = 1.18;
@@ -937,18 +932,6 @@ struct fbo_target {
 	int height;
 };
 
-struct graph_dev_smaa_effect {
-	struct fbo_target edge_target;
-	struct fbo_target blend_target;
-
-	struct graph_dev_gl_fs_effect_shader edge_shader;
-	struct graph_dev_gl_fs_effect_shader blend_shader;
-	struct graph_dev_gl_fs_effect_shader neighborhood_shader;
-
-	GLuint area_tex;
-	GLuint search_tex;
-};
-
 /* store all the shader parameters */
 static struct graph_dev_gl_single_color_lit_shader single_color_lit_shader;
 static struct graph_dev_gl_atmosphere_shader atmosphere_shader;
@@ -981,12 +964,6 @@ static struct graph_dev_gl_textured_particle_shader textured_particle_shader;
 static struct graph_dev_gl_textured_shader alpha_by_normal_shader;
 static struct graph_dev_gl_textured_shader textured_alpha_by_normal_shader;
 static struct graph_dev_gl_fs_effect_shader fs_copy_shader;
-static struct graph_dev_smaa_effect smaa_effect;
-
-static struct fbo_target msaa = { 0 };
-static struct fbo_target post_target0 = { 0 };
-static struct fbo_target post_target1 = { 0 };
-static struct fbo_target render_target_2d = { 0 };
 
 struct graph_dev_primitive {
 	int nvertices;
@@ -1006,11 +983,9 @@ static struct graph_dev_gl_context {
 	struct graph_dev_color *hue; /* current color */
 	int alpha_blend;
 	float alpha;
-	GLuint fbo_current;
 
 	int active_vp; /* 0=none, 1=2d, 2=3d */
 	int vp_x_3d, vp_y_3d, vp_width_3d, vp_height_3d;
-	GLuint fbo_2d;
 	struct mat44 ortho_2d_mvp;
 
 	int nvertex_2d;
@@ -1019,7 +994,6 @@ static struct graph_dev_gl_context {
 	GLuint vertex_buffer_2d;
 
 	struct mesh_gl_info gl_info_3d_line;
-	GLuint fbo_3d;
 	int texture_unit_active;
 	GLuint texture_unit_bind[4];
 	GLenum src_blend_func;
@@ -1163,16 +1137,6 @@ static void enable_2d_viewport(void)
 		sgc.ortho_2d_mvp.m[3][2] = -(far + near) / (far - near);
 		sgc.ortho_2d_mvp.m[3][3] = 1;
 
-		if (sgc.fbo_2d > 0) {
-			if (sgc.fbo_current != sgc.fbo_2d) {
-				glBindFramebuffer(GL_FRAMEBUFFER, sgc.fbo_2d);
-				sgc.fbo_current = sgc.fbo_2d;
-			}
-		} else if (sgc.fbo_current != 0) {
-			glBindFramebuffer(GL_FRAMEBUFFER, 0);
-			sgc.fbo_current = 0;
-		}
-
 		sgc.active_vp = 1;
 	}
 }
@@ -1181,16 +1145,6 @@ static void enable_3d_viewport(void)
 {
 	if (sgc.active_vp != 2) {
 		VIEWPORT(sgc.vp_x_3d, sgc.vp_y_3d, sgc.vp_width_3d, sgc.vp_height_3d);
-
-		if (sgc.fbo_3d > 0) {
-			if (sgc.fbo_current != sgc.fbo_3d) {
-				glBindFramebuffer(GL_FRAMEBUFFER, sgc.fbo_3d);
-				sgc.fbo_current = sgc.fbo_3d;
-			}
-		} else if (sgc.fbo_current != 0) {
-			glBindFramebuffer(GL_FRAMEBUFFER, 0);
-			sgc.fbo_current = 0;
-		}
 
 		sgc.active_vp = 2;
 	}
@@ -2962,134 +2916,14 @@ void graph_dev_start_frame(void)
 	sgc.active_vp = 0;
 	VIEWPORT(0, 0, sgc.screen_x, sgc.screen_y);
 
-	if (draw_render_to_texture && render_target_2d.fbo > 0) {
-		resize_fbo_if_needed(&render_target_2d);
-		sgc.fbo_2d = render_target_2d.fbo;
-		glBindFramebuffer(GL_FRAMEBUFFER, render_target_2d.fbo);
-		glClear(GL_COLOR_BUFFER_BIT);
-	} else
-		sgc.fbo_2d = 0;
-
-	if (draw_msaa_samples > 0 && msaa.fbo > 0) {
-
-		// glEnable(GL_MULTISAMPLE);
-
-		glBindFramebuffer(GL_FRAMEBUFFER, msaa.fbo);
-		sgc.fbo_3d = msaa.fbo;
-#if 0
-		if (msaa.width != sgc.screen_x || msaa.height != sgc.screen_y || msaa.samples != draw_msaa_samples) {
-			/* need to rebuild the fbo attachments */
-			glBindRenderbuffer(GL_RENDERBUFFER, msaa.color0_buffer);
-			glRenderbufferStorageMultisample(GL_RENDERBUFFER, draw_msaa_samples, GL_RGBA8,
-				sgc.screen_x, sgc.screen_y);
-			glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER,
-				msaa.color0_buffer);
-
-			glBindRenderbuffer(GL_RENDERBUFFER, msaa.depth_buffer);
-			glRenderbufferStorageMultisample(GL_RENDERBUFFER, draw_msaa_samples, GL_DEPTH_COMPONENT,
-				sgc.screen_x, sgc.screen_y);
-			glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER,
-				msaa.depth_buffer);
-
-			msaa.width = sgc.screen_x;
-			msaa.height = sgc.screen_y;
-			msaa.samples = draw_msaa_samples;
-
-			GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-			if (status != GL_FRAMEBUFFER_COMPLETE) {
-				print_framebuffer_error();
-			}
-		}
-#endif
-
-	} else if (draw_render_to_texture && post_target0.fbo > 0) {
-
-		resize_fbo_if_needed(&post_target0);
-
-		glBindFramebuffer(GL_FRAMEBUFFER, post_target0.fbo);
-		sgc.fbo_3d = post_target0.fbo;
-	} else {
-		/* render direct to back buffer */
-		glBindFramebuffer(GL_FRAMEBUFFER, 0);
-		sgc.fbo_3d = 0;
-	}
-
 	/* clear the bound 3d buffer */
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	sgc.fbo_current = sgc.fbo_3d;
 }
 
 void graph_dev_end_frame(void)
 {
 	/* printf("end frame\n"); */
 	draw_vertex_buffer_2d();
-
-	/* reset viewport to whole screen for final effects */
-	VIEWPORT(0, 0, sgc.screen_x, sgc.screen_y);
-
-#if 0 
-	if (msaa.fbo != 0 && sgc.fbo_3d == msaa.fbo) {
-		glBindFramebuffer(GL_READ_FRAMEBUFFER, msaa.fbo);
-		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-		glBlitFramebuffer(0, 0, msaa.width, msaa.height, 0, 0,
-			sgc.screen_x, sgc.screen_y, GL_COLOR_BUFFER_BIT, GL_NEAREST);
-
-		// glDisable(GL_MULTISAMPLE);
-
-	} else 
-#endif	 
-	 if (post_target0.fbo != 0 && sgc.fbo_3d == post_target0.fbo) {
-		GLuint result_texture;
-
-		if (draw_smaa) {
-			/* do the multi stage smaa process:
-				render to texture -> edge_fbo -> blend_fbo -> screen back buffer */
-			resize_fbo_if_needed(&smaa_effect.edge_target);
-			resize_fbo_if_needed(&smaa_effect.blend_target);
-			resize_fbo_if_needed(&post_target1);
-
-			/* edge detect pass - render into edge_fbo */
-			glBindFramebuffer(GL_FRAMEBUFFER, smaa_effect.edge_target.fbo);
-			glClear(GL_COLOR_BUFFER_BIT);
-			graph_dev_raster_full_screen_effect(&smaa_effect.edge_shader, post_target0.color0_texture,
-				0, 0, 0, 1);
-
-			/* blend pass - render into blend_fbo */
-			glBindFramebuffer(GL_FRAMEBUFFER, smaa_effect.blend_target.fbo);
-			glClear(GL_COLOR_BUFFER_BIT);
-			graph_dev_raster_full_screen_effect(&smaa_effect.blend_shader,
-				smaa_effect.edge_target.color0_texture,
-				smaa_effect.area_tex, smaa_effect.search_tex, 0, 1);
-
-			/* eighborhood pass - render to back buffer */
-			glBindFramebuffer(GL_FRAMEBUFFER, post_target1.fbo);
-			glClear(GL_COLOR_BUFFER_BIT);
-			graph_dev_raster_full_screen_effect(&smaa_effect.neighborhood_shader,
-				post_target0.color0_texture, smaa_effect.blend_target.color0_texture, 0, 0, 1);
-
-			if (draw_smaa_edge)
-				result_texture = smaa_effect.edge_target.color0_texture;
-			else if (draw_smaa_blend)
-				result_texture = smaa_effect.blend_target.color0_texture;
-			else
-				result_texture = post_target1.color0_texture;
-		} else {
-			result_texture = post_target0.color0_texture;
-		}
-
-		glBindFramebuffer(GL_FRAMEBUFFER, 0);
-		graph_dev_raster_full_screen_effect(&fs_copy_shader, result_texture, 0, 0, 0, 1);
-	}
-
-	if (render_target_2d.fbo != 0 && sgc.fbo_2d == render_target_2d.fbo) {
-		/* alpha blend copy 2d fbo onto back buffer */
-		glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-		glEnable(GL_BLEND);
-		BLEND_FUNC(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-		graph_dev_raster_full_screen_effect(&fs_copy_shader, render_target_2d.color0_texture, 0, 0, 0, 1);
-		glDisable(GL_BLEND);
-	}
 }
 
 void graph_dev_clear_depth_bit(void)
@@ -3783,110 +3617,13 @@ static void setup_smaa_effect_shader(const char *basename, struct graph_dev_gl_f
 	shader->texture2_id = -1;
 }
 
-static void setup_smaa_effect(struct graph_dev_smaa_effect *effect)
-{
-	struct graph_dev_gl_fs_effect_shader *shader;
-
-	shader = &effect->edge_shader;
-	setup_smaa_effect_shader("smaa-edge", shader);
-
-	glUseProgram(shader->program_id);
-	shader->texture0_id = glGetUniformLocation(shader->program_id, "u_AlbedoTex");
-	glUniform1i(shader->texture0_id, 0);
-
-	shader = &effect->blend_shader;
-	setup_smaa_effect_shader("smaa-blend", shader);
-
-	glUseProgram(shader->program_id);
-	shader->texture0_id = glGetUniformLocation(shader->program_id, "u_EdgeTex");
-	glUniform1i(shader->texture0_id, 0);
-	shader->texture1_id = glGetUniformLocation(shader->program_id, "u_AreaTex");
-	glUniform1i(shader->texture1_id, 1);
-	shader->texture2_id = glGetUniformLocation(shader->program_id, "u_SearchTex");
-	glUniform1i(shader->texture2_id, 2);
-
-	shader = &effect->neighborhood_shader;
-	setup_smaa_effect_shader("smaa-neighborhood", shader);
-
-	glUseProgram(shader->program_id);
-	shader->texture0_id = glGetUniformLocation(shader->program_id, "u_AlbedoTex");
-	glUniform1i(shader->texture0_id, 0);
-	shader->texture1_id = glGetUniformLocation(shader->program_id, "u_BlendTex");
-	glUniform1i(shader->texture1_id, 1);
-
-	graph_dev_gen_texture(1, &effect->edge_target.color0_texture);
-	glBindTexture(GL_TEXTURE_2D, effect->edge_target.color0_texture);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-	graph_dev_gen_texture(1, &effect->blend_target.color0_texture);
-	glBindTexture(GL_TEXTURE_2D, effect->blend_target.color0_texture);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-	/* include file defines sizes and areaTexBytes of the area texture */
-#include "share/snis/textures/AreaTex.h"
-
-	graph_dev_gen_texture(1, &effect->area_tex);
-	glBindTexture(GL_TEXTURE_2D, effect->area_tex);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE_ALPHA, (GLsizei)AREATEX_WIDTH, (GLsizei)AREATEX_HEIGHT, 0,
-		GL_LUMINANCE_ALPHA, GL_UNSIGNED_BYTE, areaTexBytes);
-
-	/* include file defines sizes and searchTexBytes of the search texture */
-#include "share/snis/textures/SearchTex.h"
-
-	graph_dev_gen_texture(1, &effect->search_tex);
-	glBindTexture(GL_TEXTURE_2D, effect->search_tex);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, (GLsizei)SEARCHTEX_WIDTH, (GLsizei)SEARCHTEX_HEIGHT, 0,
-		GL_LUMINANCE, GL_UNSIGNED_BYTE, searchTexBytes);
-
-	glGenFramebuffers(1, &effect->edge_target.fbo);
-	glBindFramebuffer(GL_FRAMEBUFFER, effect->edge_target.fbo);
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
-		effect->edge_target.color0_texture, 0);
-
-	glGenFramebuffers(1, &effect->blend_target.fbo);
-	glBindFramebuffer(GL_FRAMEBUFFER, effect->blend_target.fbo);
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
-		effect->blend_target.color0_texture, 0);
-}
-
 static void setup_2d(void)
 {
-	memset(&render_target_2d, 0, sizeof(render_target_2d));
-
 	glGenBuffers(1, &sgc.vertex_buffer_2d);
 	glBindBuffer(GL_ARRAY_BUFFER, sgc.vertex_buffer_2d);
 	glBufferData(GL_ARRAY_BUFFER, VERTEX_BUFFER_2D_SIZE, 0, GL_STREAM_DRAW);
 
 	sgc.nvertex_2d = 0;
-
-	/* render 2d to seperate fbo if supported */
-	if (fbo_render_to_texture_supported()) {
-		graph_dev_gen_texture(1, &render_target_2d.color0_texture);
-		glBindTexture(GL_TEXTURE_2D, render_target_2d.color0_texture);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-		glGenFramebuffers(1, &render_target_2d.fbo);
-		glBindFramebuffer(GL_FRAMEBUFFER, render_target_2d.fbo);
-		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
-			render_target_2d.color0_texture, 0);
-	}
 }
 
 static void setup_3d(void)
@@ -3961,9 +3698,6 @@ void graph_dev_reload_all_shaders(void)
 				&textured_alpha_by_normal_shader);
 	setup_textured_shader("planetary-lightning", UNIVERSAL_SHADER_HEADER, &planetary_lightning_shader);
 	setup_textured_shader("warp-gate-effect", UNIVERSAL_SHADER_HEADER FILMIC_TONEMAPPING, &warp_gate_effect_shader);
-
-	if (fbo_render_to_texture_supported())
-		setup_smaa_effect(&smaa_effect);
 }
 
 static void enqueue_image_load_request(struct graph_dev_image_load_request *r)
@@ -4056,51 +3790,6 @@ int graph_dev_setup(const char *shader_dir)
 	fprintf(stderr, "shader dir = %s\n", shader_directory);
 
 	glDepthFunc(GL_LESS);
-
-	memset(&msaa, 0, sizeof(msaa));
-	memset(&post_target0, 0, sizeof(post_target0));
-	memset(&post_target1, 0, sizeof(post_target1));
-	memset(&smaa_effect, 0, sizeof(smaa_effect));
-
-	if (msaa_render_to_fbo_supported()) {
-		glGenFramebuffers(1, &msaa.fbo);
-		glGenRenderbuffers(1, &msaa.color0_buffer);
-		glGenRenderbuffers(1, &msaa.depth_buffer);
-		msaa.width = 0;
-		msaa.height = 0;
-		msaa.samples = 0;
-	}
-
-	if (fbo_render_to_texture_supported()) {
-		graph_dev_gen_texture(1, &post_target0.color0_texture);
-		glBindTexture(GL_TEXTURE_2D, post_target0.color0_texture);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-		glGenRenderbuffers(1, &post_target0.depth_buffer);
-		glBindRenderbuffer(GL_RENDERBUFFER, post_target0.depth_buffer);
-
-		glGenFramebuffers(1, &post_target0.fbo);
-		glBindFramebuffer(GL_FRAMEBUFFER, post_target0.fbo);
-		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
-			post_target0.color0_texture, 0);
-		glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER,
-			post_target0.depth_buffer);
-
-		graph_dev_gen_texture(1, &post_target1.color0_texture);
-		glBindTexture(GL_TEXTURE_2D, post_target1.color0_texture);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-		glGenFramebuffers(1, &post_target1.fbo);
-		glBindFramebuffer(GL_FRAMEBUFFER, post_target1.fbo);
-		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
-			post_target1.color0_texture, 0);
-	}
 
 	graph_dev_reload_all_shaders();
 
@@ -4668,19 +4357,6 @@ void graph_dev_display_debug_menu_show(void)
 #endif
 	sng_set_foreground(WHITE);
 	debug_menu_draw_item("BILLBOARD WIREFRAME", 1, 0, draw_billboard_wireframe);
-	// debug_menu_draw_item("POLYGON AS LINE", 2, 0, draw_polygon_as_lines);
-	debug_menu_draw_item("NO MSAA", 3, 0, draw_msaa_samples == 0);
-
-	int max_samples = msaa_max_samples();
-	debug_menu_draw_item("2x MSAA", 4, max_samples < 2 || !draw_render_to_texture,
-				draw_msaa_samples == 2 && draw_render_to_texture);
-	debug_menu_draw_item("4x MSAA", 5, max_samples < 4 || !draw_render_to_texture,
-				draw_msaa_samples == 4 && draw_render_to_texture);
-	debug_menu_draw_item("RENDER TO TEXTURE", 6, 0, draw_render_to_texture);
-	debug_menu_draw_item("SMAA", 7, !draw_render_to_texture,
-									draw_smaa);
-	debug_menu_draw_item("SMAA DEBUG EDGE", 8, !draw_smaa, draw_smaa_edge);
-	debug_menu_draw_item("SMAA DEBUG BLEND", 9, !draw_smaa, draw_smaa_blend);
 	debug_menu_draw_item("PLANETARY ATMOSPHERES", 10, 0, draw_atmospheres);
 	debug_menu_draw_item("PLANET SPECULARITY", 11, 0, graph_dev_planet_specularity);
 	debug_menu_draw_item("FILMIC TONEMAPPING", 12, 0, filmic_tonemapping);
@@ -4704,47 +4380,6 @@ int graph_dev_graph_dev_debug_menu_click(int x, int y)
 #endif
 	if (selected_debug_item_checkbox(1, x, y, &draw_billboard_wireframe))
 		return 1;
-	// if (selected_debug_item_checkbox(2, x, y, &draw_polygon_as_lines))
-	// 	return 1;
-	if (selected_debug_item_checkbox(3, x, y, NULL)) {
-		draw_msaa_samples = 0;
-		return 1;
-	}
-	if (selected_debug_item_checkbox(4, x, y, NULL)) {
-		if (msaa_max_samples() >= 2 && draw_render_to_texture)
-			draw_msaa_samples = 2;
-		return 1;
-	}
-	if (selected_debug_item_checkbox(5, x, y, NULL)) {
-		if (msaa_max_samples() >= 4 && draw_render_to_texture)
-			draw_msaa_samples = 4;
-		return 1;
-	}
-	if (selected_debug_item_checkbox(6, x, y, &draw_render_to_texture)) {
-		if (!draw_render_to_texture) {
-			/* If render to texture is disabled, disable everything that needs it */
-			draw_msaa_samples = 0;
-			draw_smaa = 0;
-			draw_smaa_edge = 0;
-			draw_smaa_blend = 0;
-		}
-		return 1;
-	}
-	if (selected_debug_item_checkbox(7, x, y, &draw_smaa))
-		if (draw_render_to_texture)
-			return 1;
-	if (selected_debug_item_checkbox(8, x, y, &draw_smaa_edge)) {
-		if (draw_render_to_texture) {
-			draw_smaa_blend = 0;
-			return 1;
-		}
-	}
-	if (selected_debug_item_checkbox(9, x, y, &draw_smaa_blend)) {
-		if (draw_render_to_texture) {
-			draw_smaa_edge = 0;
-			return 1;
-		}
-	}
 	if (selected_debug_item_checkbox(10, x, y, &draw_atmospheres))
 		return 1;
 	if (selected_debug_item_checkbox(11, x, y, &graph_dev_planet_specularity))
