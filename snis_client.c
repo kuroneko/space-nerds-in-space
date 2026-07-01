@@ -4429,11 +4429,7 @@ static struct sci_candidate {
 	float bearing;
 } sci_candidate[MAXGAMEOBJS];
 
-#ifdef __APPLE__
-static int sci_candidate_compare(__attribute__((unused)) void *thunk, const void *a, const void *b)
-#else
-static int sci_candidate_compare(const void *a, const void *b, __attribute__((unused)) void *cookie)
-#endif
+static int sci_candidate_compare(const void *a, const void *b)
 {
 	const struct sci_candidate *c1 = a;
 	const struct sci_candidate *c2 = b;
@@ -4487,11 +4483,7 @@ static void sci_next_prev_target_pressed(int direction)
 		return;
 
 	/* Sort all the candidate science targets by bearing */
-#if defined(__APPLE__)  || defined(__FreeBSD__)
-	qsort_r(sci_candidate, ncandidates, sizeof(sci_candidate[0]), 0, sci_candidate_compare);
-#else
-	qsort_r(sci_candidate, ncandidates, sizeof(sci_candidate[0]), sci_candidate_compare, 0);
-#endif
+	qsort(sci_candidate, ncandidates, sizeof(sci_candidate[0]), sci_candidate_compare);
 
 	/* Find the currently selected science candidate */
 	int guy = -1;
@@ -6047,13 +6039,8 @@ struct universe_timestamp_sample {
 static int nuniverse_timestamp_samples = 0;
 static struct universe_timestamp_sample universe_timestamp_samples[UPDATE_UNIVERSE_TIMESTAMP_COUNT];
 
-#if defined(__APPLE__)  || defined(__FreeBSD__)
-static int universe_timestamp_sample_compare_less(__attribute__((unused)) void *vcx,
+static int universe_timestamp_sample_compare_less(
 							const void *a, const void *b)
-#else
-static int universe_timestamp_sample_compare_less(const void *a, const void *b,
-							__attribute__((unused)) void *vcx)
-#endif
 {
 	const struct universe_timestamp_sample *A = a;
 	const struct universe_timestamp_sample *B = b;
@@ -6192,13 +6179,8 @@ static int process_update_universe_timestamp(double update_time)
 
 	if (code == UPDATE_UNIVERSE_TIMESTAMP_END_SAMPLE) {
 		/* sort the samples by offset */
-#if defined(__APPLE__)  || defined(__FreeBSD__)
-		qsort_r(universe_timestamp_samples, nuniverse_timestamp_samples,
-			sizeof(universe_timestamp_samples[0]), 0, universe_timestamp_sample_compare_less);
-#else
-		qsort_r(universe_timestamp_samples, nuniverse_timestamp_samples,
-			sizeof(universe_timestamp_samples[0]), universe_timestamp_sample_compare_less, 0);
-#endif
+		qsort(universe_timestamp_samples, nuniverse_timestamp_samples,
+			sizeof(universe_timestamp_samples[0]), universe_timestamp_sample_compare_less);
 		/* get median offset */
 		double median_offset;
 		int mid_index = nuniverse_timestamp_samples / 2;
