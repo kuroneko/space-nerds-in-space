@@ -34,8 +34,11 @@
 #define ARRAY_ELEMENTS(x) (sizeof(x)/sizeof((x)[0]))
 #endif
 
-
+#ifdef __APPLE__
+#define OPENGL_VERSION_STRING "#version 150\n"
+#else
 #define OPENGL_VERSION_STRING "#version 130\n"
+#endif
 #define UNIVERSAL_SHADER_HEADER \
 	OPENGL_VERSION_STRING
 
@@ -3619,7 +3622,7 @@ static void setup_skybox_shader(struct graph_dev_gl_skybox_shader *shader)
 
 	/* Get a handle for our "MVP" uniform */
 	shader->mvp_id = glGetUniformLocation(shader->program_id, "MVP");
-	shader->texture_id = glGetUniformLocation(shader->program_id, "texture");
+	shader->texture_id = glGetUniformLocation(shader->program_id, "s_texture");
 	shader->filmic_tonemapping_id = glGetUniformLocation(shader->program_id, "u_FilmicTonemapping");
 	shader->tonemapping_gain_id = glGetUniformLocation(shader->program_id, "u_TonemappingGain");
 	glUniform1i(shader->texture_id, 0);
@@ -4071,6 +4074,16 @@ int graph_dev_setup(const char *shader_dir)
 		fprintf(stderr, "Got error trying to bind GL\n");
 		return -1;
 	}
+
+	const char *version = (const char *)glGetString(GL_VERSION);
+	const char *vendor = (const char *)glGetString(GL_VENDOR);
+	const char *renderer = (const char *)glGetString(GL_RENDERER);
+	const char *glslversion = (const char *)glGetString(GL_SHADING_LANGUAGE_VERSION);
+	fprintf(stderr, "OpenGL: Version:  %s\n", version);
+	fprintf(stderr, "        Vendor:   %s\n", vendor);
+	fprintf(stderr, "        Renderer: %s\n", renderer);
+	fprintf(stderr, "        Shader Language Version: %s\n", glslversion);
+
 	if (!GLAD_GL_VERSION_3_1) {
 		fprintf(stderr, "Need at least OpenGL 3.1\n");
 		return -1;
