@@ -3591,7 +3591,7 @@ static void setup_skybox_shader(struct graph_dev_gl_skybox_shader *shader)
 
 	/* Get a handle for our "MVP" uniform */
 	shader->mvp_id = glGetUniformLocation(shader->program_id, "MVP");
-	shader->texture_id = glGetUniformLocation(shader->program_id, "texture");
+	shader->texture_id = glGetUniformLocation(shader->program_id, "s_texture");
 	shader->filmic_tonemapping_id = glGetUniformLocation(shader->program_id, "u_FilmicTonemapping");
 	shader->tonemapping_gain_id = glGetUniformLocation(shader->program_id, "u_TonemappingGain");
 	glUniform1i(shader->texture_id, 0);

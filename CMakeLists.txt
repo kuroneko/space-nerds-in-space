@@ -237,7 +237,7 @@ if(SNIS_BUILD_SERVERS)
 		snis_licenses.c
 		net_utils.c
 		commodities.c)
-	target_link_libraries(snis_multiverse PUBLIC ssglclient ${MATH_LIBRARY})
+	target_link_libraries(snis_multiverse PUBLIC ssglclient ${MATH_LIBRARY} ${CRYPT_LIB_NAME})
 endif()
 
 add_executable(snis_arduino
