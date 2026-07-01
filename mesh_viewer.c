@@ -1244,7 +1244,11 @@ int main(int argc, char *argv[])
 
 	snis_typefaces_init();
 	sng_set_font_family(0);
+#ifdef USE_GLES
+	graph_dev_setup("share/snis/shader-es");
+#else
 	graph_dev_setup("share/snis/shader");
+#endif
 	setup_skybox("orange-haze");
 
 	SDL_SetWindowSize(screen, real_screen_width, real_screen_height);

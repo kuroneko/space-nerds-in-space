@@ -22890,7 +22890,6 @@ static int main_da_expose(SDL_Window *window)
 end_of_drawing:
 
 	graph_dev_end_frame();
-	glFinish();
 	SDL_GL_SwapWindow(window);
 
 	double end_time = time_now_double();
@@ -23628,11 +23627,6 @@ static void load_textures(void)
 	loaded_something = load_static_textures();
 	loaded_something += load_per_solarsystem_textures();
 	(void) loaded_something; /* To suppress scan-build from complaining about dead stores */
-
-#ifndef WITHOUTOPENGL
-	if (loaded_something)
-		glFinish();
-#endif
 }
 
 static int main_da_button_press(SDL_MouseButtonEvent *event)
@@ -26039,8 +26033,8 @@ int main(int argc, char *argv[])
 	/* allow context upgrading (macOS, etc) */
 	// SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG);
 #else
-	// for GLES, we claim ES 3.0
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+	// for GLES, we claim ES 2.0
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
 #endif
