@@ -26,7 +26,7 @@ pkg_check_modules(portaudio REQUIRED IMPORTED_TARGET portaudio-2.0)
 pkg_check_modules(curl REQUIRED IMPORTED_TARGET libcurl)
 
 if(SNIS_WITH_VOICE_CHAT)
-	pkg_check_modules(opus REQUIRED opus)
+	pkg_check_modules(opus REQUIRED IMPORTED_TARGET opus)
 endif()
 
 # Search for the math library 'm'
@@ -142,8 +142,7 @@ add_library(snisclientcommon OBJECT
 	wwviaudio.c
 	xdg_base_dir_spec.c)
 target_link_libraries(snisclientcommon PUBLIC sniscommon)
-target_include_directories(snisclientcommon PUBLIC ${opus_INCLUDE_DIRS})
-target_link_libraries(snisclientcommon PUBLIC sniscommon ${opus_LIBRARIES} SDL2::SDL2)
+target_link_libraries(snisclientcommon PUBLIC sniscommon PkgConfig::opus SDL2::SDL2)
 
 add_executable(snis_client
 	joystick_config.c
