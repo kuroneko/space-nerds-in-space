@@ -3,7 +3,7 @@
 #
 
 file(MAKE_DIRECTORY "$ENV{DESTDIR}${SNIS_DATA_DIR}")
-execute_process(COMMAND ${CMAKE_INSTALL_PREFIX}/bin/snis_update_assets --force --destdir $ENV{DESTDIR}${CMAKE_INSTALL_PREFIX} --srcdir ${CMAKE_CURRENT_SOURCE_DIR}/../share/snis)
+execute_process(COMMAND ${CMAKE_INSTALL_PREFIX}/bin/snis_update_assets --force --destdir $ENV{DESTDIR}${CMAKE_INSTALL_PREFIX} --srcdir ${CMAKE_SOURCE_DIR}/share/snis)
 
 if(CMAKE_SYSTEM_NAME MATCHES Linux)
     set(DESKTOP_PATH "${CMAKE_INSTALL_PREFIX}/share/applications")
