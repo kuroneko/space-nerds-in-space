@@ -552,7 +552,7 @@ static void *broadcast_lobby_info(__attribute__((unused)) void *arg)
 	memcpy(payload.hostname, hostname, sizeof(payload.hostname));
 
 	do {
-		rc = sendto(bcast, &payload, sizeof(payload), 0, &bcast_addr, sizeof(struct sockaddr_in));
+		rc = sendto(bcast, &payload, sizeof(payload), 0, (const struct sockaddr *)&bcast_addr, sizeof(struct sockaddr_in));
 		if (rc < 0)
 			ssgl_log(SSGL_ERROR, "sendto failed: %s\n", strerror(errno));
 		ssgl_sleep(2);

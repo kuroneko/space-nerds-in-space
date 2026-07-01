@@ -52,7 +52,7 @@
 #include <SDL.h>
 #include <fenv.h>
 #else
-#include <SDL2.h>
+#include <SDL.h>
 #endif
 
 #include "opengl_cap.h"
@@ -4429,7 +4429,11 @@ static struct sci_candidate {
 	float bearing;
 } sci_candidate[MAXGAMEOBJS];
 
-int sci_candidate_compare(const void *a, const void *b, __attribute__((unused)) void *cookie)
+#ifdef __APPLE__
+static int sci_candidate_compare(__attribute__((unused)) void *thunk, const void *a, const void *b)
+#else
+static int sci_candidate_compare(const void *a, const void *b, __attribute__((unused)) void *cookie)
+#endif
 {
 	const struct sci_candidate *c1 = a;
 	const struct sci_candidate *c2 = b;
@@ -4484,7 +4488,7 @@ static void sci_next_prev_target_pressed(int direction)
 
 	/* Sort all the candidate science targets by bearing */
 #if defined(__APPLE__)  || defined(__FreeBSD__)
-	qsort_r(sci_candidate, ncandidates, sizeof(sci_candidate[0]), sci_candidate_compare);
+	qsort_r(sci_candidate, ncandidates, sizeof(sci_candidate[0]), 0, sci_candidate_compare);
 #else
 	qsort_r(sci_candidate, ncandidates, sizeof(sci_candidate[0]), sci_candidate_compare, 0);
 #endif
