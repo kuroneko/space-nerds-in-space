@@ -1,31 +1,42 @@
 cmake_minimum_required(VERSION 3.20)
 project(SNIS LANGUAGES C)
 
+if (UNIX)
+	set(SNIS_BUILD_SERVERS_DEFAULT ON)
+else()
+	set(SNIS_BUILD_SERVERS_DEFAULT OFF)
+endif()
+
 option(SNIS_INSTALL_UTILS "Install Utilities" ON)
+option(SNIS_BUILD_SERVERS "Build the SNIS servers" ${SNIS_BUILD_SERVERS_DEFAULT})
 option(SNIS_WITH_VOICE_CHAT "Enable Voice Chat Support" ON)
 option(SNIS_USE_GLES "Use OpenGL ES instead of OpenGL" OFF)
 
 find_package(SDL2 REQUIRED)
 find_package(PNG REQUIRED)
-find_package(Lua REQUIRED)
-if(Lua_FOUND AND NOT TARGET Lua::Lua)
-  add_library(Lua::Lua INTERFACE IMPORTED)
-  set_target_properties(
-    Lua::Lua
-    PROPERTIES
-      INTERFACE_INCLUDE_DIRECTORIES "${LUA_INCLUDE_DIR}"
-      INTERFACE_LINK_LIBRARIES "${LUA_LIBRARIES}"
-  )
-endif()
-find_package(OpenSSL COMPONENTS Crypto REQUIRED)
 
-include(FindPkgConfig)
-if(CMAKE_SYSTEM_NAME MATCHES Linux)
-	pkg_check_modules(xcrypt REQUIRED IMPORTED_TARGET libxcrypt)
-	set(CRYPT_LIB_NAME PkgConfig::xcrypt)
-else()
-	set(CRYPT_LIB_NAME "")
+if(SNIS_BUILD_SERVERS)
+	find_package(Lua REQUIRED)
+	if(Lua_FOUND AND NOT TARGET Lua::Lua)
+	  add_library(Lua::Lua INTERFACE IMPORTED)
+	  set_target_properties(
+		Lua::Lua
+		PROPERTIES
+		  INTERFACE_INCLUDE_DIRECTORIES "${LUA_INCLUDE_DIR}"
+		  INTERFACE_LINK_LIBRARIES "${LUA_LIBRARIES}"
+	  )
+	endif()
+
+	include(FindPkgConfig)
+	if(CMAKE_SYSTEM_NAME MATCHES Linux)
+		pkg_check_modules(xcrypt REQUIRED IMPORTED_TARGET libxcrypt)
+		set(CRYPT_LIB_NAME PkgConfig::xcrypt)
+	else()
+		set(CRYPT_LIB_NAME "")
+	endif()
 endif()
+
+find_package(OpenSSL COMPONENTS Crypto REQUIRED)
 pkg_check_modules(vorbisfile REQUIRED IMPORTED_TARGET vorbisfile)
 pkg_check_modules(portaudio REQUIRED IMPORTED_TARGET portaudio-2.0)
 pkg_check_modules(curl REQUIRED IMPORTED_TARGET libcurl)
@@ -64,7 +75,6 @@ include_directories(${CMAKE_BINARY_DIR}/generated)
 if(SNIS_USE_GLES)
   add_compile_definitions(USE_GLES=1)
 endif()
-
 
 add_library(sniscommon OBJECT
 	arbitrary_spin.c
@@ -148,6 +158,9 @@ add_library(snisclientcommon OBJECT
 	xdg_base_dir_spec.c)
 target_link_libraries(snisclientcommon PUBLIC sniscommon)
 target_link_libraries(snisclientcommon PUBLIC sniscommon PkgConfig::opus SDL2::SDL2)
+if(SNIS_WITH_VOICE_CHAT)
+	target_compile_definitions(snisclientcommon PUBLIC WITHVOICEHCAT=1)
+endif()
 
 add_executable(snis_client
 	joystick_config.c
@@ -172,59 +185,61 @@ target_link_libraries(snis_client PRIVATE
 	 glad
 	 SDL2::SDL2main)
 
-add_executable(snis_server
-	snis_server.c
-	starbase-comms.c
-	power-model.c
-	quat.c
-	vec4.c
-	matrix.c
-	snis_event_callback.c
-	space-part.c
-	fleet.c
-	docking_port.c
-	elastic_collision.c
-	snis_nl.c
-	spelled_numbers.c
-	snis_server_tracker.c
-	snis_bridge_update_packet.c
-	solarsystem_config.c
-	a_star.c
-	key_value_parser.c
-	nonuniform_random_sampler.c
-	oriented_bounding_box.c
-	shape_collision.c
-	graph_dev_mesh_stub.c
-	turret_aimer.c
-	snis_hash.c
-	snis_debug_server.c
-	ship_registration.c
-	talking_stick.c
-	transport_contract.c)
-target_link_libraries(snis_server PUBLIC sniscommon ssglclient Lua::Lua ${CRYPT_LIB_NAME})
+if(SNIS_BUILD_SERVERS)
+	add_executable(snis_server
+		snis_server.c
+		starbase-comms.c
+		power-model.c
+		quat.c
+		vec4.c
+		matrix.c
+		snis_event_callback.c
+		space-part.c
+		fleet.c
+		docking_port.c
+		elastic_collision.c
+		snis_nl.c
+		spelled_numbers.c
+		snis_server_tracker.c
+		snis_bridge_update_packet.c
+		solarsystem_config.c
+		a_star.c
+		key_value_parser.c
+		nonuniform_random_sampler.c
+		oriented_bounding_box.c
+		shape_collision.c
+		graph_dev_mesh_stub.c
+		turret_aimer.c
+		snis_hash.c
+		snis_debug_server.c
+		ship_registration.c
+		talking_stick.c
+		transport_contract.c)
+	target_link_libraries(snis_server PUBLIC sniscommon ssglclient Lua::Lua ${CRYPT_LIB_NAME})
 
-add_executable(snis_multiverse
-	snis_multiverse.c
-	snis_marshal.c
-	snis_socket_io.c
-	mathutils.c
-	mtwist.c
-	stacktrace.c
-	snis_hash.c
-	quat.c
-	string-utils.c
-	key_value_parser.c
-	snis_bridge_update_packet.c
-	pthread_util.c
-	rootcheck.c
-	starmap_adjacency.c
-	replacement_assets.c
-	snis_asset_dir.c
-	snis_bin_dir.c
-	snis_licenses.c
-	net_utils.c
-	commodities.c)
-target_link_libraries(snis_multiverse PUBLIC ssglclient ${MATH_LIBRARY})
+	add_executable(snis_multiverse
+		snis_multiverse.c
+		snis_marshal.c
+		snis_socket_io.c
+		mathutils.c
+		mtwist.c
+		stacktrace.c
+		snis_hash.c
+		quat.c
+		string-utils.c
+		key_value_parser.c
+		snis_bridge_update_packet.c
+		pthread_util.c
+		rootcheck.c
+		starmap_adjacency.c
+		replacement_assets.c
+		snis_asset_dir.c
+		snis_bin_dir.c
+		snis_licenses.c
+		net_utils.c
+		commodities.c)
+	target_link_libraries(snis_multiverse PUBLIC ssglclient ${MATH_LIBRARY})
+endif()
 
 add_executable(snis_arduino
 	snis_arduino.c
@@ -242,8 +257,10 @@ target_link_libraries(snis_update_assets PRIVATE
 	OpenSSL::Crypto
 	PkgConfig::curl)
 
-configure_file(snis_launcher.tmpl ${CMAKE_CURRENT_BINARY_DIR}/snis_launcher @ONLY NEWLINE_STYLE UNIX)
-configure_file(util/update_assets_from_launcher.sh.tmpl ${CMAKE_CURRENT_BINARY_DIR}/update_assets_from_launcher.sh @ONLY NEWLINE_STYLE UNIX)
+if(UNIX)
+	configure_file(snis_launcher.tmpl ${CMAKE_CURRENT_BINARY_DIR}/snis_launcher @ONLY NEWLINE_STYLE UNIX)
+	configure_file(util/update_assets_from_launcher.sh.tmpl ${CMAKE_CURRENT_BINARY_DIR}/update_assets_from_launcher.sh @ONLY NEWLINE_STYLE UNIX)
+endif()
 
 if(SNIS_INSTALL_UTILS)
 	add_executable(mesh_viewer
@@ -341,13 +358,19 @@ endif()
 
 
 # Install binaries and scripts
-install(TARGETS snis_server snis_client snis_multiverse snis_arduino snis_update_assets)
-install(FILES 
-	${CMAKE_CURRENT_BINARY_DIR}/snis_launcher
-	${CMAKE_CURRENT_BINARY_DIR}/update_assets_from_launcher.sh
-	DESTINATION bin
-	PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
-)
+install(TARGETS snis_client snis_arduino snis_update_assets)
+if(SNIS_BUILD_SERVERS)
+	install(TARGETS snis_server snis_multiverse)
+endif()
+
+if(UNIX)
+	install(FILES
+		${CMAKE_CURRENT_BINARY_DIR}/snis_launcher
+		${CMAKE_CURRENT_BINARY_DIR}/update_assets_from_launcher.sh
+		DESTINATION bin
+		PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
+	)
+endif()
 
 if(SNIS_INSTALL_UTILS)
 	install(TARGETS mesh_viewer mask_clouds cloud-mask-normalmap sample_image_colors 
