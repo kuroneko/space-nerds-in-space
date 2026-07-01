@@ -7,7 +7,7 @@
 #include <limits.h>
 #include <pthread.h>
 
-#include <glad/gl.h>
+#include <glad/gles2.h>
 #include <SDL.h>
 
 #include "shader.h"
@@ -35,9 +35,10 @@
 #endif
 
 
-#define OPENGL_VERSION_STRING "#version 130\n"
+#define OPENGL_VERSION_STRING "#version 300 es\n"
 #define UNIVERSAL_SHADER_HEADER \
-	OPENGL_VERSION_STRING
+	OPENGL_VERSION_STRING \
+	"precision highp float;\n"
 
 /*
  * Filmic tonemapping cribbed from oolite:
@@ -107,7 +108,6 @@ static struct loaded_cubemap_texture loaded_cubemap_textures[MAX_LOADED_CUBEMAP_
 
 static int draw_normal_lines = 0;
 static int draw_billboard_wireframe = 0;
-static int draw_polygon_as_lines = 0;
 static int draw_msaa_samples = 0;
 static int draw_render_to_texture = 0;
 static int draw_smaa = 0;
@@ -118,7 +118,7 @@ static int filmic_tonemapping = 1;
 static float tonemapping_gain = 1.18;
 int graph_dev_planet_specularity = 1;
 int graph_dev_atmosphere_ring_shadows = 1;
-static const char *default_shader_directory = "share/snis/shader";
+static const char *default_shader_directory = "share/snis/shader-es";
 static char *shader_directory = NULL;
 
 struct mesh_gl_info {
@@ -1079,14 +1079,6 @@ static void print_framebuffer_error(void)
 		printf("FBO Duplicate attachment.\n");
 		break;
 
-	case GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER:
-		printf("FBO Missing draw buffer.\n");
-		break;
-
-	case GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER:
-		printf("FBO Missing read buffer.\n");
-		break;
-
 	case GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE:
 		printf("FBO Attached images must have the same number of samples.\n");
 		break;
@@ -1177,9 +1169,7 @@ static void enable_2d_viewport(void)
 				sgc.fbo_current = sgc.fbo_2d;
 			}
 		} else if (sgc.fbo_current != 0) {
-			static const GLenum drawBuffers[] = { GL_BACK };
 			glBindFramebuffer(GL_FRAMEBUFFER, 0);
-			glDrawBuffers(ARRAY_ELEMENTS(drawBuffers), drawBuffers);
 			sgc.fbo_current = 0;
 		}
 
@@ -1445,8 +1435,6 @@ static void graph_dev_raster_texture(struct raster_texture_params *p)
 		glEnable(GL_CULL_FACE);
 	else
 		glDisable(GL_CULL_FACE);
-	if (draw_polygon_as_lines)
-		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
 	if (p->do_blend) {
 		/* enable depth test but don't write to depth buffer */
@@ -1621,8 +1609,6 @@ static void graph_dev_raster_texture(struct raster_texture_params *p)
 	glDisable(GL_DEPTH_TEST);
 	if (p->do_cullface)
 		glDisable(GL_CULL_FACE);
-	if (draw_polygon_as_lines)
-		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 	if (p->do_blend) {
 		glDepthMask(GL_TRUE);
 		glDisable(GL_BLEND);
@@ -1648,9 +1634,6 @@ static void graph_dev_raster_single_color_lit(const struct mat44 *mat_mvp, const
 
 	glEnable(GL_DEPTH_TEST);
 	glEnable(GL_CULL_FACE);
-	if (draw_polygon_as_lines)
-		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-
 	glUseProgram(single_color_lit_shader.program_id);
 
 	glUniformMatrix4fv(single_color_lit_shader.mv_matrix_id, 1, GL_FALSE, &mat_mv->m[0][0]);
@@ -1695,8 +1678,6 @@ static void graph_dev_raster_single_color_lit(const struct mat44 *mat_mvp, const
 
 	glDisable(GL_DEPTH_TEST);
 	glDisable(GL_CULL_FACE);
-	if (draw_polygon_as_lines)
-		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
 #if DEBUG_NORMALS
 	if (draw_normal_lines) {
@@ -1728,8 +1709,6 @@ static void graph_dev_raster_atmosphere(const struct mat44 *mat_mvp, const struc
 
 	glEnable(GL_DEPTH_TEST);
 	glEnable(GL_CULL_FACE);
-	if (draw_polygon_as_lines)
-		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
 	if (ring_texture_v >= 0.0 && graph_dev_atmosphere_ring_shadows) {
 		/* Set up uniforms for ring shadow */
@@ -1804,8 +1783,6 @@ static void graph_dev_raster_atmosphere(const struct mat44 *mat_mvp, const struc
 	glDisable(GL_DEPTH_TEST);
 	glDisable(GL_CULL_FACE);
 	glDepthMask(GL_TRUE);
-	if (draw_polygon_as_lines)
-		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
 #if DEBUG_NORMALS
 	if (draw_normal_lines) {
@@ -2122,7 +2099,7 @@ void graph_dev_raster_point_cloud_mesh(struct graph_dev_gl_point_cloud_shader *s
 	struct mesh_gl_info *ptr = m->graph_ptr;
 
 	glEnable(GL_DEPTH_TEST);
-	glEnable(GL_VERTEX_PROGRAM_POINT_SIZE);
+	// glEnable(GL_VERTEX_PROGRAM_POINT_SIZE);
 
 	if (do_blend) {
 		/* enable depth test but don't write to depth buffer */
@@ -2160,7 +2137,7 @@ void graph_dev_raster_point_cloud_mesh(struct graph_dev_gl_point_cloud_shader *s
 	glUseProgram(0);
 
 	glDisable(GL_DEPTH_TEST);
-	glDisable(GL_VERTEX_PROGRAM_POINT_SIZE);
+	// glDisable(GL_VERTEX_PROGRAM_POINT_SIZE);
 	if (do_blend) {
 		glDepthMask(GL_TRUE);
 		glDisable(GL_BLEND);
@@ -2246,9 +2223,6 @@ static void graph_dev_raster_particle_animation(struct entity *e,
 	/* enable depth test but don't write to depth buffer */
 	glEnable(GL_DEPTH_TEST);
 	glDepthMask(GL_FALSE);
-
-	if (draw_polygon_as_lines)
-		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
 	glEnable(GL_BLEND);
 	BLEND_FUNC(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
@@ -2385,8 +2359,6 @@ static void graph_dev_raster_particle_animation(struct entity *e,
 
 	glDisable(GL_DEPTH_TEST);
 	glDepthMask(GL_TRUE);
-	if (draw_polygon_as_lines)
-		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 	glDisable(GL_BLEND);
 
 	if (draw_billboard_wireframe) {
@@ -3002,7 +2974,7 @@ void graph_dev_start_frame(void)
 
 	if (draw_msaa_samples > 0 && msaa.fbo > 0) {
 
-		glEnable(GL_MULTISAMPLE);
+		// glEnable(GL_MULTISAMPLE);
 
 		glBindFramebuffer(GL_FRAMEBUFFER, msaa.fbo);
 		sgc.fbo_3d = msaa.fbo;
@@ -3062,7 +3034,7 @@ void graph_dev_end_frame(void)
 		glBlitFramebuffer(0, 0, msaa.width, msaa.height, 0, 0,
 			sgc.screen_x, sgc.screen_y, GL_COLOR_BUFFER_BIT, GL_NEAREST);
 
-		glDisable(GL_MULTISAMPLE);
+		// glDisable(GL_MULTISAMPLE);
 
 	} else if (post_target0.fbo != 0 && sgc.fbo_3d == post_target0.fbo) {
 		GLuint result_texture;
@@ -3744,10 +3716,10 @@ static void setup_fs_effect_shader(const char *basename,
 	struct graph_dev_gl_fs_effect_shader *shader)
 {
 	const char *vert_header =
-		UNIVERSAL_SHADER_HEADER\
+		UNIVERSAL_SHADER_HEADER
 		"#define INCLUDE_VS 1\n";
 	const char *frag_header =
-		UNIVERSAL_SHADER_HEADER\
+		UNIVERSAL_SHADER_HEADER
 		"#define INCLUDE_FS 1\n";
 
 	/* Create and compile our GLSL program from the shaders */
@@ -3785,11 +3757,11 @@ static void setup_smaa_effect_shader(const char *basename, struct graph_dev_gl_f
 	const char *vert_header;
 	const char *frag_header;
 	vert_header =
-		"#version 130\n"
+		UNIVERSAL_SHADER_HEADER
 		"#define INCLUDE_VS 1\n"
 		"#define SMAA_GLSL_3\n";
 	frag_header =
-		"#version 130\n"
+		UNIVERSAL_SHADER_HEADER
 		"#define INCLUDE_FS 1\n"
 		"#define SMAA_GLSL_3\n";
 
@@ -4067,21 +4039,15 @@ static void graph_dev_set_up_image_loader_work_queues(void)
 
 int graph_dev_setup(const char *shader_dir)
 {	
-	if (!gladLoadGL((GLADloadfunc)SDL_GL_GetProcAddress)) {
+	if (!gladLoadGLES2((GLADloadfunc)SDL_GL_GetProcAddress)) {
 		fprintf(stderr, "Got error trying to bind GL\n");
 		return -1;
 	}
-	if (!GLAD_GL_VERSION_3_1) {
-		fprintf(stderr, "Need at least OpenGL 3.1\n");
+	if (!GLAD_GL_ES_VERSION_3_0) {
+		fprintf(stderr, "Need at least OpenGL ES 3.0\n");
 		return -1;
 	}
 	printf("Initialized GLAD\n");
-
-	if (framebuffer_srgb_supported())
-		printf("sRGB framebuffer supported\n");
-
-	if (texture_srgb_supported())
-		printf("sRGB texture supported\n");
 
 	if (shader_dir) {
 		if (shader_directory && shader_directory != default_shader_directory)
@@ -4091,10 +4057,7 @@ int graph_dev_setup(const char *shader_dir)
 		shader_directory = (char *) default_shader_directory;
 	}
 
-	// Core since GL3.2 - must check for support otherwise
-	// also, this only affets cube maps in a sensible way, set once and forget.
-	if (GLAD_GL_ARB_seamless_cube_map)
-		glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
+	fprintf(stderr, "shader dir = %s\n", shader_directory);
 
 	glDepthFunc(GL_LESS);
 
@@ -4714,7 +4677,7 @@ void graph_dev_display_debug_menu_show(void)
 #endif
 	sng_set_foreground(WHITE);
 	debug_menu_draw_item("BILLBOARD WIREFRAME", 1, 0, draw_billboard_wireframe);
-	debug_menu_draw_item("POLYGON AS LINE", 2, 0, draw_polygon_as_lines);
+	// debug_menu_draw_item("POLYGON AS LINE", 2, 0, draw_polygon_as_lines);
 	debug_menu_draw_item("NO MSAA", 3, 0, draw_msaa_samples == 0);
 
 	int max_samples = msaa_max_samples();
@@ -4750,8 +4713,8 @@ int graph_dev_graph_dev_debug_menu_click(int x, int y)
 #endif
 	if (selected_debug_item_checkbox(1, x, y, &draw_billboard_wireframe))
 		return 1;
-	if (selected_debug_item_checkbox(2, x, y, &draw_polygon_as_lines))
-		return 1;
+	// if (selected_debug_item_checkbox(2, x, y, &draw_polygon_as_lines))
+	// 	return 1;
 	if (selected_debug_item_checkbox(3, x, y, NULL)) {
 		draw_msaa_samples = 0;
 		return 1;

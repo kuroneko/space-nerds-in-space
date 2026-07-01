@@ -3,6 +3,7 @@ project(SNIS LANGUAGES C)
 
 option(SNIS_INSTALL_UTILS "Install Utilities" ON)
 option(SNIS_WITH_VOICE_CHAT "Enable Voice Chat Support" ON)
+option(SNIS_USE_GLES "Use OpenGL ES instead of OpenGL" OFF)
 
 find_package(SDL2 REQUIRED)
 find_package(PNG REQUIRED)
@@ -34,13 +35,25 @@ find_library(MATH_LIBRARY m)
 # included/embeded libraries.
 add_subdirectory(ssgl)
 
-add_library(glad STATIC extern/glad/src/gl.c)
-target_include_directories(glad PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/extern/glad/include>)
+# if we're building for GLES, use the GLES only version of glad.
+if(SNIS_USE_GLES)
+  add_library(glad STATIC extern/glad-es/src/gles2.c)
+  target_include_directories(glad PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/extern/glad-es/include>)
+else()
+  add_library(glad STATIC extern/glad/src/gl.c)
+  target_include_directories(glad PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/extern/glad/include>)
+endif()
 
 # so many of SNIS's bits assume these will be set, just use add_compile_definitions to set it.
 add_compile_definitions(PREFIX=${CMAKE_INSTALL_PREFIX})
 set(SNIS_DATA_DIR "${CMAKE_INSTALL_PREFIX}/share/snis")
 add_compile_definitions(DATADIR="${SNIS_DATA_DIR}")
+
+# similarly, just splatter USE_GLES over everything if we're targetting GLES.
+if(SNIS_USE_GLES)
+  add_compile_definitions(USE_GLES=1)
+endif()
+
 
 add_library(sniscommon OBJECT
 	arbitrary_spin.c
@@ -127,15 +140,19 @@ target_include_directories(snisclientcommon PUBLIC ${opus_INCLUDE_DIRS})
 target_link_libraries(snisclientcommon PUBLIC sniscommon ${opus_LIBRARIES} SDL2::SDL2)
 
 add_executable(snis_client
-	graph_dev_opengl.c
 	joystick_config.c
-	opengl_cap.c
 	png_utils.c
 	shader.c
     snis_client.c
    	snis_graph.c	
 	snis_xwindows_hacks.c
 )
+if(SNIS_USE_GLES)
+	target_sources(snis_client PUBLIC graph_dev_gles.c gles_cap.c)
+else()
+	target_sources(snis_client PUBLIC graph_dev_opengl.c opengl_cap.c)
+endif()
+
 #target_compile_definitions(snis_client PRIVATE DATADIR="${SNIS_DATA_DIR}")
 target_link_libraries(snis_client PRIVATE
 	 snisclientcommon sniscommon ssglclient
@@ -221,8 +238,6 @@ configure_file(util/update_assets_from_launcher.sh.tmpl ${CMAKE_CURRENT_BINARY_D
 if(SNIS_INSTALL_UTILS)
 	add_executable(mesh_viewer
 		shader.c
-		graph_dev_opengl.c
-		opengl_cap.c
 		snis_graph.c
 		png_utils.c
 		turret_aimer.c
@@ -254,6 +269,11 @@ if(SNIS_INSTALL_UTILS)
 	target_link_libraries(mesh_viewer PRIVATE
 		glad PNG::PNG SDL2::SDL2 SDL2::SDL2main
 		${MATH_LIBRARY})
+	if(SNIS_USE_GLES)
+		target_sources(mesh_viewer PUBLIC graph_dev_gles.c gles_cap.c)
+	else()
+		target_sources(mesh_viewer PUBLIC graph_dev_opengl.c opengl_cap.c)
+	endif()
 
 	# mask_clouds
 	add_executable(mask_clouds 

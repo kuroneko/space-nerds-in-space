@@ -23234,7 +23234,11 @@ static int main_da_configure(SDL_Window *window)
 	static int gl_is_setup = 0;
 	if (!gl_is_setup) {
 		char shader_dir[PATH_MAX];
+		#ifdef USE_GLES
+		snprintf(shader_dir, sizeof(shader_dir), "%s/%s", asset_dir, "shader-es");
+		#else
 		snprintf(shader_dir, sizeof(shader_dir), "%s/%s", asset_dir, "shader");
+		#endif
 		graph_dev_setup(shader_dir);
 		if (no_textures_mode) {
 			char err_tex[PATH_MAX];
@@ -26039,6 +26043,7 @@ int main(int argc, char *argv[])
 	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
 	SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 0);
 	SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 0);
+#ifndef USE_GLES	
 	SDL_GL_SetAttribute(SDL_GL_FRAMEBUFFER_SRGB_CAPABLE, 1);
 
 	/* there is no core profile before GL 3.2 per se, but VC4 claims it does 3.1 */
@@ -26047,6 +26052,12 @@ int main(int argc, char *argv[])
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
 	/* allow context upgrading (macOS, etc) */
 	// SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG);
+#else
+	// for GLES, we claim ES 3.0
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+#endif
 
 	SDL_Window *window = SDL_CreateWindow("Space Nerds in Space",
 		SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,

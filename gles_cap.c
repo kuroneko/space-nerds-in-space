@@ -18,25 +18,52 @@
 	foundation, inc., 51 franklin st, fifth floor, boston, ma  02110-1301  usa
 */
 
-#ifndef INCLUDE_opengl_cap_h
-#define INCLUDE_opengl_cap_h
+#include "opengl_cap.h"
 
-#ifdef USE_GLES
+#include <stdlib.h>
+
 #include <glad/gles2.h>
-#else
-#include <glad/gl.h>
-#endif
 
-extern int msaa_framebuffer_supported(void);
+/* gles doesn't do MSAA in any way like GL - disable because we need to rework that code significnatly */
 
-extern int msaa_render_to_fbo_supported(void);
+int msaa_framebuffer_supported()
+{
+	return 0;
+}
 
-extern int msaa_max_samples(void);
+int msaa_render_to_fbo_supported()
+{
+	return 0;
+}
 
-extern int fbo_render_to_texture_supported(void);
+int msaa_max_samples()
+{
+	return 0;
+}
 
-extern int framebuffer_srgb_supported(void);
+int fbo_render_to_texture_supported()
+{
+	static int suppress = -1;
+	if (suppress == -1) {
+		if (getenv("SNIS_SUPPRESS_RENDER_TO_TEXTURE") != NULL)
+			suppress = 1;
+		else
+			suppress = 0;
+	}
+	if (suppress)
+		return 0;
+	// FBOs are required in ES 3.0
+	return 1;
+}
 
-extern int texture_srgb_supported(void);
+int framebuffer_srgb_supported()
+{
+	return 1;
+}
 
-#endif
+int texture_srgb_supported()
+{
+	return 1;
+}
+
+
