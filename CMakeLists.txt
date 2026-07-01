@@ -157,7 +157,7 @@ add_library(snisclientcommon OBJECT
 	wwviaudio.c
 	xdg_base_dir_spec.c)
 target_link_libraries(snisclientcommon PUBLIC sniscommon)
-target_link_libraries(snisclientcommon PUBLIC sniscommon PkgConfig::opus SDL2::SDL2)
+target_link_libraries(snisclientcommon PUBLIC sniscommon PkgConfig::opus PkgConfig::vorbisfile SDL2::SDL2)
 if(SNIS_WITH_VOICE_CHAT)
 	target_compile_definitions(snisclientcommon PUBLIC WITHVOICEHCAT=1)
 endif()
@@ -179,7 +179,6 @@ endif()
 #target_compile_definitions(snis_client PRIVATE DATADIR="${SNIS_DATA_DIR}")
 target_link_libraries(snis_client PRIVATE
 	 snisclientcommon sniscommon ssglclient
-	 PkgConfig::vorbisfile
 	 PkgConfig::portaudio
 	 PNG::PNG
 	 glad
