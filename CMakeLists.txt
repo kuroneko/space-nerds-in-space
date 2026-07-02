@@ -392,5 +392,6 @@ install(FILES
 	man/lsssgl.1
 	DESTINATION man/man1
 	PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ)
-install(SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/cmake/install_snis_data.cmake)
+configure_file(cmake/install_snis_data.cmake.in ${CMAKE_CURRENT_BINARY_DIR}/install_snis_data.cmake @ONLY)
+install(SCRIPT ${CMAKE_CURRENT_BINARY_DIR}/install_snis_data.cmake)
 
