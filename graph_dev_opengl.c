@@ -122,7 +122,7 @@ static float tonemapping_gain = 1.18;
 int graph_dev_planet_specularity = 1;
 int graph_dev_atmosphere_ring_shadows = 1;
 static const char *default_shader_directory = "share/snis/shader";
-static char *shader_directory = NULL;
+static char shader_directory[PATH_MAX];
 
 struct mesh_gl_info {
 	/* common buffer to hold vertex positions */
@@ -4097,11 +4097,10 @@ int graph_dev_setup(const char *shader_dir)
 		printf("sRGB texture supported\n");
 
 	if (shader_dir) {
-		if (shader_directory && shader_directory != default_shader_directory)
-			free(shader_directory);
-		shader_directory = strdup(shader_dir);
+		strncpy(shader_directory, shader_dir, PATH_MAX);
+		strncat(shader_directory, "/shader", PATH_MAX);
 	} else {
-		shader_directory = (char *) default_shader_directory;
+		strncpy(shader_directory, default_shader_directory, PATH_MAX);
 	}
 
 	// Core since GL3.2 - must check for support otherwise
@@ -4952,3 +4951,33 @@ void graph_dev_clear_window(void)
 	glClear(GL_COLOR_BUFFER_BIT);
 }
 
+void graph_dev_prepare_for_window(uint32_t *window_flags)
+{
+	SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 5);
+	SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 5);
+	SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 5);
+	SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
+	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+	SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 0);
+	SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 0);
+	SDL_GL_SetAttribute(SDL_GL_FRAMEBUFFER_SRGB_CAPABLE, 1);
+
+	/* there is no core profile before GL 3.2 per se, but VC7 claims it does 3.1 */
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+	/* allow context upgrading (macOS, etc) */
+	// SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG);
+
+	*window_flags = *window_flags | SDL_WINDOW_OPENGL;
+}
+
+void graph_dev_create_context(SDL_Window *window)
+{
+	SDL_GLContext gl_context = SDL_GL_CreateContext(window);
+	if (NULL == gl_context) {
+		fprintf(stderr, "Couldn't create OpenGL Context: %s\n", SDL_GetError());
+		exit(1);
+	}
+	(void) gl_context;
+}
