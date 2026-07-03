@@ -122,6 +122,9 @@ static const char *default_shader_directory = "share/snis/shader-es";
 
 static char shader_directory[PATH_MAX];
 
+static GLenum fbo_format = GL_RGBA4;
+
+
 // static char *shader_directory = NULL;
 
 struct mesh_gl_info {
@@ -1100,16 +1103,11 @@ static void resize_fbo_if_needed(struct fbo_target *target)
 
 		/* need to resize the fbo attachments */
 		if (target->color0_texture > 0) {
-			GLenum format = GL_RGBA4;
-			// if (GLAD_GL_OES_rgb8_rgba8) {
-			// 	format = GL_RGBA8_OES;
-			// }
-
 			glBindTexture(GL_TEXTURE_2D, target->color0_texture);
 			if (GLAD_GL_EXT_texture_storage) {
-				glTexStorage2DEXT(GL_TEXTURE_2D, 1, format, sgc.screen_x, sgc.screen_y);	
+				glTexStorage2DEXT(GL_TEXTURE_2D, 1, fbo_format, sgc.screen_x, sgc.screen_y);	
 			} else {
-				glTexImage2D(GL_TEXTURE_2D, 0, format,
+				glTexImage2D(GL_TEXTURE_2D, 0, fbo_format,
 					sgc.screen_x, sgc.screen_y, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
 			}
 			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, target->color0_texture, 0);
@@ -4062,6 +4060,28 @@ int graph_dev_setup(const char *shader_dir)
 
 	if (GLAD_GL_EXT_sRGB) {
 		fprintf(stderr, "WARNING: No hardware support for SRGB colorspace - will force linear.\n");
+	}
+
+	int want8bit = 0;
+	int bitWidth = 0;
+	static const SDL_GLattr attrs[] = { SDL_GL_RED_SIZE, SDL_GL_GREEN_SIZE, SDL_GL_BLUE_SIZE };
+	for (unsigned idx = 0; idx < ARRAY_ELEMENTS(attrs); idx++) {
+		SDL_GL_GetAttribute(attrs[idx], &bitWidth);
+		if (bitWidth > 4) {
+			want8bit = 1;
+			break;
+		}
+	}			
+
+	if (GLAD_GL_OES_rgb8_rgba8) {
+		if (want8bit) {
+			fbo_format = GL_RGBA8_OES;
+		}
+	} else {
+		fbo_format = GL_RGBA4;
+		if (want8bit) {
+			fprintf(stderr, "WARNING: our real buffers are > RGBA4, but we don't have GL_OES_rgb8_rgba8 - FBOs will be RGBA4\n");
+		}
 	}
 
 	if (shader_dir) {
