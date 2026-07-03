@@ -782,6 +782,8 @@ CMNMLINK=$(ECHO) '  LINK' $@ && $(CC) ${MYCFLAGS} -o $@ util/cloud-mask-normalma
 
 all:	bin/.t ${COMMONOBJS} ${SERVEROBJS} ${MULTIVERSEOBJS} ${CLIENTOBJS} ${BINPROGS} ${SCAD_PARAMS_FILES} ${DOCKING_PORT_FILES} ${METAINFOFILE}
 
+modeldata:	${SCAD_PARAMS_FILES} ${DOCKING_PORT_FILES} ${METAINFOFILE}
+
 # if you only want to build the servers, say on a cloud server
 # use WITHVOICECHAT=no SERVERSONLY=1 to avoid complaints from pkg-config
 serversonly:	${SERVERPROGS}
