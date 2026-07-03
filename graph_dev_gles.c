@@ -119,7 +119,10 @@ static float tonemapping_gain = 1.18;
 int graph_dev_planet_specularity = 1;
 int graph_dev_atmosphere_ring_shadows = 1;
 static const char *default_shader_directory = "share/snis/shader-es";
-static char *shader_directory = NULL;
+
+static char shader_directory[PATH_MAX];
+
+// static char *shader_directory = NULL;
 
 struct mesh_gl_info {
 	/* common buffer to hold vertex positions */
@@ -4062,11 +4065,10 @@ int graph_dev_setup(const char *shader_dir)
 	}
 
 	if (shader_dir) {
-		if (shader_directory && shader_directory != default_shader_directory)
-			free(shader_directory);
-		shader_directory = strdup(shader_dir);
+		strncpy(shader_directory, shader_dir, PATH_MAX);
+		strncat(shader_directory, "/shader-es", PATH_MAX);
 	} else {
-		shader_directory = (char *) default_shader_directory;
+		strncpy(shader_directory, default_shader_directory, PATH_MAX);
 	}
 
 	fprintf(stderr, "shader dir = %s\n", shader_directory);

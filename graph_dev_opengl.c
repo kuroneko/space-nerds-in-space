@@ -122,7 +122,7 @@ static float tonemapping_gain = 1.18;
 int graph_dev_planet_specularity = 1;
 int graph_dev_atmosphere_ring_shadows = 1;
 static const char *default_shader_directory = "share/snis/shader";
-static char *shader_directory = NULL;
+static char shader_directory[PATH_MAX];
 
 struct mesh_gl_info {
 	/* common buffer to hold vertex positions */
@@ -4097,11 +4097,10 @@ int graph_dev_setup(const char *shader_dir)
 		printf("sRGB texture supported\n");
 
 	if (shader_dir) {
-		if (shader_directory && shader_directory != default_shader_directory)
-			free(shader_directory);
-		shader_directory = strdup(shader_dir);
+		strncpy(shader_directory, shader_dir, PATH_MAX);
+		strncat(shader_directory, "/shader", PATH_MAX);
 	} else {
-		shader_directory = (char *) default_shader_directory;
+		strncpy(shader_directory, default_shader_directory, PATH_MAX);
 	}
 
 	// Core since GL3.2 - must check for support otherwise

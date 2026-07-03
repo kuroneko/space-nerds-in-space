@@ -23219,13 +23219,7 @@ static int main_da_configure(SDL_Window *window)
 
 	static int gl_is_setup = 0;
 	if (!gl_is_setup) {
-		char shader_dir[PATH_MAX];
-		#ifdef USE_GLES
-		snprintf(shader_dir, sizeof(shader_dir), "%s/%s", asset_dir, "shader-es");
-		#else
-		snprintf(shader_dir, sizeof(shader_dir), "%s/%s", asset_dir, "shader");
-		#endif
-		graph_dev_setup(shader_dir);
+		graph_dev_setup(asset_dir);
 		if (no_textures_mode) {
 			char err_tex[PATH_MAX];
 			snprintf(err_tex, sizeof(err_tex), "%s/textures/small-green-grid.png", asset_dir);
