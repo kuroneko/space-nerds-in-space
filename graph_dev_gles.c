@@ -1076,7 +1076,7 @@ static void print_framebuffer_error(void)
 		break;
 
 	case GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT:
-		printf("FBO Duplicate attachment.\n");
+		printf("FBO Incomplete attachment.\n");
 		break;
 
 	case GL_FRAMEBUFFER_INCOMPLETE_DIMENSIONS:
@@ -1090,20 +1090,33 @@ static void print_framebuffer_error(void)
 
 static void resize_fbo_if_needed(struct fbo_target *target)
 {
+	glBindFramebuffer(GL_FRAMEBUFFER, target->fbo);
+
 	if (target->width != sgc.screen_x || target->height != sgc.screen_y) {
+		fprintf(stderr, "Resizing FBO %d attachments to %d x %d\n", target->fbo, sgc.screen_x, sgc.screen_y);
+
 		/* need to resize the fbo attachments */
 		if (target->color0_texture > 0) {
+			GLenum format = GL_RGBA4;
+			// if (GLAD_GL_OES_rgb8_rgba8) {
+			// 	format = GL_RGBA8_OES;
+			// }
+
 			glBindTexture(GL_TEXTURE_2D, target->color0_texture);
-			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
-				sgc.screen_x, sgc.screen_y, 0, GL_RGB, GL_UNSIGNED_BYTE, 0);
+			if (GLAD_GL_EXT_texture_storage) {
+				glTexStorage2DEXT(GL_TEXTURE_2D, 1, format, sgc.screen_x, sgc.screen_y);	
+			} else {
+				glTexImage2D(GL_TEXTURE_2D, 0, format,
+					sgc.screen_x, sgc.screen_y, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+			}
+			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, target->color0_texture, 0);
 		}
 
 		if (target->depth_buffer > 0) {
 			glBindRenderbuffer(GL_RENDERBUFFER, target->depth_buffer);
-			glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, sgc.screen_x, sgc.screen_y);
+			glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT16, sgc.screen_x, sgc.screen_y);
+			glFramebufferRenderbuffer(GL_RENDERBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, target->depth_buffer);
 		}
-
-		glBindFramebuffer(GL_FRAMEBUFFER, target->fbo);
 
 		GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
 		if (status != GL_FRAMEBUFFER_COMPLETE) {
@@ -2962,6 +2975,8 @@ void graph_dev_start_frame(void)
 	sgc.active_vp = 0;
 	VIEWPORT(0, 0, sgc.screen_x, sgc.screen_y);
 
+	glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+
 	if (draw_render_to_texture && render_target_2d.fbo > 0) {
 		resize_fbo_if_needed(&render_target_2d);
 		sgc.fbo_2d = render_target_2d.fbo;
@@ -3820,6 +3835,7 @@ static void setup_smaa_effect(struct graph_dev_smaa_effect *effect)
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	
 
 	graph_dev_gen_texture(1, &effect->blend_target.color0_texture);
 	glBindTexture(GL_TEXTURE_2D, effect->blend_target.color0_texture);
@@ -4893,3 +4909,27 @@ void graph_dev_clear_window(void)
 	glClear(GL_COLOR_BUFFER_BIT);
 }
 
+void graph_dev_prepare_for_window(uint32_t *window_flags)
+{
+	SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 4);
+	SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 4);
+	SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 4);
+	SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 16);
+	
+	// for GLES, we claim ES 2.0
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+
+	*window_flags = *window_flags | SDL_WINDOW_OPENGL;
+}
+
+void graph_dev_create_context(SDL_Window *window)
+{
+	SDL_GLContext gl_context = SDL_GL_CreateContext(window);
+	if (NULL == gl_context) {
+		fprintf(stderr, "Couldn't create OpenGL Context: %s\n", SDL_GetError());
+		exit(1);
+	}
+	(void) gl_context;
+}
