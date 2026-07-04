@@ -707,6 +707,7 @@ static void maybe_unload_shader(struct graph_dev_gl_shader_metadata *meta, GLuin
 struct graph_dev_gl_vertex_color_shader {
 	struct graph_dev_gl_shader_metadata meta;
 	GLuint program_id;
+	GLuint vao_id;
 	GLint mvp_matrix_id;
 	GLint vertex_position_id;
 	GLint vertex_color_id;
@@ -715,6 +716,7 @@ struct graph_dev_gl_vertex_color_shader {
 struct graph_dev_gl_single_color_lit_shader {
 	struct graph_dev_gl_shader_metadata meta;
 	GLuint program_id;
+	GLuint vao_id;
 	GLint mvp_matrix_id;
 	GLint mv_matrix_id;
 	GLint normal_matrix_id;
@@ -731,6 +733,7 @@ struct graph_dev_gl_single_color_lit_shader {
 struct graph_dev_gl_atmosphere_shader {
 	struct graph_dev_gl_shader_metadata meta;
 	GLuint program_id;
+	GLuint vao_id;
 	GLint mvp_matrix_id;
 	GLint mv_matrix_id;
 	GLint normal_matrix_id;
@@ -753,6 +756,7 @@ struct graph_dev_gl_atmosphere_shader {
 struct graph_dev_gl_filled_wireframe_shader {
 	struct graph_dev_gl_shader_metadata meta;
 	GLuint program_id;
+	GLuint vao_id;
 	GLint viewport_id;
 	GLint mvp_matrix_id;
 	GLint position_id;
@@ -767,6 +771,7 @@ struct graph_dev_gl_filled_wireframe_shader {
 struct graph_dev_gl_trans_wireframe_shader {
 	struct graph_dev_gl_shader_metadata meta;
 	GLuint program_id;
+	GLuint vao_id;
 	GLint mvp_matrix_id;
 	GLint mv_matrix_id;
 	GLint normal_matrix_id;
@@ -781,6 +786,7 @@ struct graph_dev_gl_trans_wireframe_shader {
 struct graph_dev_gl_single_color_shader {
 	struct graph_dev_gl_shader_metadata meta;
 	GLuint program_id;
+	GLuint vao_id;
 	GLint mvp_matrix_id;
 	GLint vertex_position_id;
 	GLint color_id;
@@ -789,6 +795,7 @@ struct graph_dev_gl_single_color_shader {
 struct graph_dev_gl_line_single_color_shader {
 	struct graph_dev_gl_shader_metadata meta;
 	GLuint program_id;
+	GLuint vao_id;
 	GLint mvp_matrix_id;
 	GLint viewport_id;
 	GLint multi_one_id;
@@ -803,6 +810,7 @@ struct graph_dev_gl_line_single_color_shader {
 struct graph_dev_gl_point_cloud_shader {
 	struct graph_dev_gl_shader_metadata meta;
 	GLuint program_id;
+	GLuint vao_id;
 	GLint mvp_matrix_id;
 	GLint vertex_position_id;
 	GLint point_size_id;
@@ -813,6 +821,7 @@ struct graph_dev_gl_point_cloud_shader {
 struct graph_dev_gl_skybox_shader {
 	struct graph_dev_gl_shader_metadata meta;
 	GLuint program_id;
+	GLuint vao_id;
 	GLint mvp_id;
 	GLint vertex_id;
 	GLint texture_id;
@@ -824,6 +833,7 @@ struct graph_dev_gl_skybox_shader {
 struct graph_dev_gl_color_by_w_shader {
 	struct graph_dev_gl_shader_metadata meta;
 	GLuint program_id;
+	GLuint vao_id;
 	GLint mvp_id;
 	GLint position_id;
 	GLint near_color_id;
@@ -837,6 +847,7 @@ struct graph_dev_gl_color_by_w_shader {
 struct graph_dev_gl_textured_shader {
 	struct graph_dev_gl_shader_metadata meta;
 	GLuint program_id;
+	GLuint vao_id;
 	GLint mvp_matrix_id;
 	GLint mv_matrix_id;
 	GLint normal_matrix_id;
@@ -900,6 +911,7 @@ struct shadow_annulus_data {
 struct graph_dev_gl_textured_particle_shader {
 	struct graph_dev_gl_shader_metadata meta;
 	GLuint program_id;
+	GLuint vao_id;
 	GLint mvp_matrix_id;
 	GLint camera_up_vec_id;
 	GLint camera_right_vec_id;
@@ -920,6 +932,7 @@ struct graph_dev_gl_textured_particle_shader {
 struct graph_dev_gl_fs_effect_shader { /* For full screen effect shaders */
 	struct graph_dev_gl_shader_metadata meta;
 	GLuint program_id;
+	GLuint vao_id;
 	GLint mvp_matrix_id;
 	GLint vertex_position_id;
 	GLint texture_coord_id;
@@ -1236,6 +1249,7 @@ static void draw_vertex_buffer_2d(void)
 			sgc.vertex_data_2d);
 
 		glUseProgram(vertex_color_shader.program_id);
+		glBindVertexArray(vertex_color_shader.vao_id);
 
 		glUniformMatrix4fv(vertex_color_shader.mvp_matrix_id, 1, GL_FALSE, &sgc.ortho_2d_mvp.m[0][0]);
 
@@ -1301,12 +1315,7 @@ static void draw_vertex_buffer_2d(void)
 
 		sgc.nvertex_2d = 0;
 
-		glDisableVertexAttribArray(vertex_color_shader.vertex_position_id);
-		glDisableVertexAttribArray(vertex_color_shader.vertex_color_id);
-		glUseProgram(0);
-
 		/* orphan this buffer so we don't get blocked on these draw commands */
-		glBindBuffer(GL_ARRAY_BUFFER, sgc.vertex_buffer_2d);
 		glBufferData(GL_ARRAY_BUFFER, VERTEX_BUFFER_2D_SIZE, 0, GL_STREAM_DRAW);
 	}
 }
@@ -1343,6 +1352,7 @@ static void graph_dev_draw_normal_lines(const struct mat44 *mat_mvp, struct mesh
 	glEnable(GL_DEPTH_TEST);
 
 	glUseProgram(single_color_shader.program_id);
+	glBindVertexArray(single_color_shader.vao_id);
 
 	glUniformMatrix4fv(single_color_shader.mvp_matrix_id, 1, GL_FALSE, &mat_mvp->m[0][0]);
 
@@ -1387,9 +1397,6 @@ static void graph_dev_draw_normal_lines(const struct mat44 *mat_mvp, struct mesh
 		(void *)offsetof(struct vertex_buffer_data, position.v.x) /* array buffer offset */
 	);
 	glDrawArrays(GL_LINES, 0, m->ntriangles * 3 * 2);
-
-	glDisableVertexAttribArray(single_color_shader.vertex_position_id);
-	glUseProgram(0);
 
 	glDisable(GL_DEPTH_TEST);
 }
@@ -1459,6 +1466,7 @@ static void graph_dev_raster_texture(struct raster_texture_params *p)
 	}
 
 	glUseProgram(shader->program_id);
+	glBindVertexArray(shader->vao_id);
 
 	if (shader->texture_2d_id >= 0)
 		BIND_TEXTURE(GL_TEXTURE0, GL_TEXTURE_2D, p->texture_number);
@@ -1610,17 +1618,6 @@ static void graph_dev_raster_texture(struct raster_texture_params *p)
 
 	glDrawArrays(GL_TRIANGLES, 0, p->m->ntriangles * 3);
 
-	glDisableVertexAttribArray(shader->vertex_position_id);
-	if (shader->vertex_normal_id >= 0)
-		glDisableVertexAttribArray(shader->vertex_normal_id);
-	if (shader->vertex_tangent_id >= 0)
-		glDisableVertexAttribArray(shader->vertex_tangent_id);
-	if (shader->vertex_bitangent_id >= 0)
-		glDisableVertexAttribArray(shader->vertex_bitangent_id);
-	if (shader->texture_coord_id >= 0)
-		glDisableVertexAttribArray(shader->texture_coord_id);
-	glUseProgram(0);
-
 	glDisable(GL_DEPTH_TEST);
 	if (p->do_cullface)
 		glDisable(GL_CULL_FACE);
@@ -1655,6 +1652,7 @@ static void graph_dev_raster_single_color_lit(const struct mat44 *mat_mvp, const
 		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
 	glUseProgram(single_color_lit_shader.program_id);
+	glBindVertexArray(single_color_lit_shader.vao_id);
 
 	glUniformMatrix4fv(single_color_lit_shader.mv_matrix_id, 1, GL_FALSE, &mat_mv->m[0][0]);
 	glUniformMatrix4fv(single_color_lit_shader.mvp_matrix_id, 1, GL_FALSE, &mat_mvp->m[0][0]);
@@ -1691,10 +1689,6 @@ static void graph_dev_raster_single_color_lit(const struct mat44 *mat_mvp, const
 	);
 
 	glDrawArrays(GL_TRIANGLES, 0, m->ntriangles * 3);
-
-	glDisableVertexAttribArray(single_color_lit_shader.vertex_position_id);
-	glDisableVertexAttribArray(single_color_lit_shader.vertex_normal_id);
-	glUseProgram(0);
 
 	glDisable(GL_DEPTH_TEST);
 	glDisable(GL_CULL_FACE);
@@ -1738,6 +1732,7 @@ static void graph_dev_raster_atmosphere(const struct mat44 *mat_mvp, const struc
 		/* Set up uniforms for ring shadow */
 		shader = &atmosphere_with_annulus_shadow_shader;
 		glUseProgram(shader->program_id);
+		glBindVertexArray(shader->vao_id);
 		if (shadow_annulus->texture_id > 0 && shader->shadow_annulus_texture_id > 0)
 			BIND_TEXTURE(GL_TEXTURE0, GL_TEXTURE_2D, shadow_annulus->texture_id);
 
@@ -1763,6 +1758,7 @@ static void graph_dev_raster_atmosphere(const struct mat44 *mat_mvp, const struc
 	} else {
 		shader = &atmosphere_shader;
 		glUseProgram(shader->program_id);
+		glBindVertexArray(shader->vao_id);
 	}
 
 	glUniform1f(shader->atmosphere_brightness_id, atmosphere_brightness);
@@ -1800,10 +1796,6 @@ static void graph_dev_raster_atmosphere(const struct mat44 *mat_mvp, const struc
 
 	glDrawArrays(GL_TRIANGLES, 0, m->ntriangles * 3);
 
-	glDisableVertexAttribArray(shader->vertex_position_id);
-	glDisableVertexAttribArray(shader->vertex_normal_id);
-	glUseProgram(0);
-
 	glDisable(GL_DEPTH_TEST);
 	glDisable(GL_CULL_FACE);
 	glDepthMask(GL_TRUE);
@@ -1831,6 +1823,7 @@ static void graph_dev_raster_filled_wireframe_mesh(const struct mat44 *mat_mvp, 
 	glEnable(GL_CULL_FACE);
 
 	glUseProgram(filled_wireframe_shader.program_id);
+	glBindVertexArray(filled_wireframe_shader.vao_id);
 
 	glUniform2f(filled_wireframe_shader.viewport_id, sgc.vp_width_3d, sgc.vp_height_3d);
 	glUniformMatrix4fv(filled_wireframe_shader.mvp_matrix_id, 1, GL_FALSE, &mat_mvp->m[0][0]);
@@ -1897,9 +1890,6 @@ static void graph_dev_raster_filled_wireframe_mesh(const struct mat44 *mat_mvp, 
 
 	glDrawArrays(GL_TRIANGLES, 0, ptr->ntriangles*3);
 
-	glDisableVertexAttribArray(filled_wireframe_shader.position_id);
-	glUseProgram(0);
-
 	glDisable(GL_DEPTH_TEST);
 	glDisable(GL_CULL_FACE);
 
@@ -1928,6 +1918,7 @@ static void graph_dev_raster_trans_wireframe_mesh(struct graph_dev_gl_trans_wire
 		assert(shader);
 		assert(clip_sphere);
 		glUseProgram(shader->program_id);
+		glBindVertexArray(shader->vao_id);
 
 		glUniformMatrix4fv(shader->mvp_matrix_id, 1, GL_FALSE, &mat_mvp->m[0][0]);
 		glUniformMatrix4fv(shader->mv_matrix_id, 1, GL_FALSE, &mat_mv->m[0][0]);
@@ -1967,6 +1958,7 @@ static void graph_dev_raster_trans_wireframe_mesh(struct graph_dev_gl_trans_wire
 	} else {
 		/* don't cullface so just render with single color shader */
 		glUseProgram(single_color_shader.program_id);
+		glBindVertexArray(single_color_shader.vao_id);
 
 		glUniformMatrix4fv(single_color_shader.mvp_matrix_id, 1, GL_FALSE, &mat_mvp->m[0][0]);
 		glUniform4f(single_color_shader.color_id, line_color->red,
@@ -1985,15 +1977,6 @@ static void graph_dev_raster_trans_wireframe_mesh(struct graph_dev_gl_trans_wire
 	}
 
 	glDrawArrays(GL_LINES, 0, ptr->nwireframe_lines * 2);
-
-	if (do_cullface) {
-		glDisableVertexAttribArray(shader->vertex_position_id);
-		glDisableVertexAttribArray(shader->vertex_normal_id);
-	} else {
-		glDisableVertexAttribArray(single_color_shader.vertex_position_id);
-	}
-
-	glUseProgram(0);
 
 	glDisable(GL_DEPTH_TEST);
 
@@ -2022,6 +2005,7 @@ static void graph_dev_raster_line_mesh(struct entity *e, const struct mat44 *mat
 		struct material_color_by_w *mc = &e->material_ptr->color_by_w;
 
 		glUseProgram(color_by_w_shader.program_id);
+		glBindVertexArray(color_by_w_shader.vao_id);
 
 		glUniformMatrix4fv(color_by_w_shader.mvp_id, 1, GL_FALSE, &mat_mvp->m[0][0]);
 
@@ -2043,6 +2027,7 @@ static void graph_dev_raster_line_mesh(struct entity *e, const struct mat44 *mat
 		vertex_position_id = color_by_w_shader.position_id;
 	} else {
 		glUseProgram(line_single_color_shader.program_id);
+		glBindVertexArray(line_single_color_shader.vao_id);
 
 		glUniformMatrix4fv(line_single_color_shader.mvp_matrix_id, 1, GL_FALSE, &mat_mvp->m[0][0]);
 		glUniform2f(line_single_color_shader.viewport_id, sgc.vp_width_3d, sgc.vp_height_3d);
@@ -2102,14 +2087,6 @@ static void graph_dev_raster_line_mesh(struct entity *e, const struct mat44 *mat
 
 	glDrawArrays(GL_LINES, 0, ptr->nlines * 2);
 
-	glDisableVertexAttribArray(vertex_position_id);
-	if (e->material_ptr && e->material_ptr->type != MATERIAL_COLOR_BY_W) {
-		glDisableVertexAttribArray(line_single_color_shader.multi_one_id);
-		glDisableVertexAttribArray(line_single_color_shader.line_vertex0_id);
-		glDisableVertexAttribArray(line_single_color_shader.line_vertex1_id);
-	}
-	glUseProgram(0);
-
 	glDisable(GL_DEPTH_TEST);
 }
 
@@ -2135,6 +2112,7 @@ void graph_dev_raster_point_cloud_mesh(struct graph_dev_gl_point_cloud_shader *s
 	}
 
 	glUseProgram(shader->program_id);
+	glBindVertexArray(shader->vao_id);
 
 	glUniformMatrix4fv(shader->mvp_matrix_id, 1, GL_FALSE, &mat_mvp->m[0][0]);
 	glUniform1f(shader->point_size_id, pointSize);
@@ -2158,9 +2136,6 @@ void graph_dev_raster_point_cloud_mesh(struct graph_dev_gl_point_cloud_shader *s
 	);
 
 	glDrawArrays(GL_POINTS, 0, ptr->npoints);
-
-	glDisableVertexAttribArray(shader->vertex_position_id);
-	glUseProgram(0);
 
 	glDisable(GL_DEPTH_TEST);
 	glDisable(GL_VERTEX_PROGRAM_POINT_SIZE);
@@ -2257,6 +2232,7 @@ static void graph_dev_raster_particle_animation(struct entity *e,
 	BLEND_FUNC(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
 	glUseProgram(textured_particle_shader.program_id);
+	glBindVertexArray(textured_particle_shader.vao_id);
 
 	glUniformMatrix4fv(textured_particle_shader.mvp_matrix_id, 1, GL_FALSE, &transform->mvp.m[0][0]);
 
@@ -2376,15 +2352,6 @@ static void graph_dev_raster_particle_animation(struct entity *e,
 
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ptr->particle_index_buffer);
 	glDrawElements(GL_TRIANGLES, ptr->nparticles * 6, GL_UNSIGNED_SHORT, NULL);
-
-	glDisableVertexAttribArray(textured_particle_shader.multi_one_id);
-	glDisableVertexAttribArray(textured_particle_shader.start_position_id);
-	glDisableVertexAttribArray(textured_particle_shader.start_tint_color_id);
-	glDisableVertexAttribArray(textured_particle_shader.start_apm_id);
-	glDisableVertexAttribArray(textured_particle_shader.end_position_id);
-	glDisableVertexAttribArray(textured_particle_shader.end_tint_color_id);
-	glDisableVertexAttribArray(textured_particle_shader.end_apm_id);
-	glUseProgram(0);
 
 	glDisable(GL_DEPTH_TEST);
 	glDepthMask(GL_TRUE);
@@ -2912,6 +2879,7 @@ static void graph_dev_raster_full_screen_effect(struct graph_dev_gl_fs_effect_sh
 	static const struct mat44 mat_identity = { { { 1, 0, 0, 0}, { 0, 1, 0, 0 }, { 0, 0, 1, 0}, { 0, 0, 0, 1} } };
 
 	glUseProgram(shader->program_id);
+	glBindVertexArray(shader->vao_id);
 
 	if (texture0_id > 0 && shader->texture0_id >= 0) {
 		BIND_TEXTURE(GL_TEXTURE0, GL_TEXTURE_2D, texture0_id);
@@ -2961,9 +2929,6 @@ static void graph_dev_raster_full_screen_effect(struct graph_dev_gl_fs_effect_sh
 
 	glDrawArrays(GL_TRIANGLES, 0, textured_unit_quad.nvertices);
 
-	glDisableVertexAttribArray(shader->vertex_position_id);
-	glDisableVertexAttribArray(shader->texture_coord_id);
-	glUseProgram(0);
 }
 
 /* If any textures loads (PNG decoding) have completed, send them to the GPU */
@@ -3271,6 +3236,9 @@ static void setup_single_color_lit_shader(struct graph_dev_gl_single_color_lit_s
 				"single-color-lit-per-vertex.frag",
 				UNIVERSAL_SHADER_HEADER FILMIC_TONEMAPPING);
 
+	/* create the VAO for this shader */
+	glGenVertexArrays(1, &shader->vao_id);
+
 	/* Get a handle for our "MVP" uniform */
 	shader->mvp_matrix_id = glGetUniformLocation(shader->program_id, "u_MVPMatrix");
 	shader->mv_matrix_id = glGetUniformLocation(shader->program_id, "u_MVMatrix");
@@ -3297,6 +3265,9 @@ static void setup_atmosphere_shader(struct graph_dev_gl_atmosphere_shader *shade
 				with_ring_shadow ?
 				UNIVERSAL_SHADER_HEADER FILMIC_TONEMAPPING "\n#define USE_ANNULUS_SHADOW 1\n" :
 				UNIVERSAL_SHADER_HEADER FILMIC_TONEMAPPING);
+
+	/* create the VAO for this shader */
+	glGenVertexArrays(1, &shader->vao_id);
 
 	/* Get a handle for our "MVP" uniform */
 	shader->mvp_matrix_id = glGetUniformLocation(shader->program_id, "u_MVPMatrix");
@@ -3342,7 +3313,12 @@ static void setup_textured_shader(const char *basename, const char *defines,
 
 	shader->program_id = load_concat_shaders(shader_directory,
 				vert_header, 1, filenames, frag_header, 1, filenames);
+
+	/* create the VAO for this shader */
+	glGenVertexArrays(1, &shader->vao_id);
+
 	glUseProgram(shader->program_id);
+	glBindVertexArray(shader->vao_id);
 
 	shader->mvp_matrix_id = glGetUniformLocation(shader->program_id, "u_MVPMatrix");
 	shader->mv_matrix_id = glGetUniformLocation(shader->program_id, "u_MVMatrix");
@@ -3424,7 +3400,11 @@ static void setup_textured_cubemap_shader(const char *basename, int use_normal_m
 
 	shader->program_id = load_concat_shaders(shader_directory,
 				vert_header, 1, filenames, frag_header, 1, filenames);
+	/* create the VAO for this shader */
+	glGenVertexArrays(1, &shader->vao_id);
+
 	glUseProgram(shader->program_id);
+	glBindVertexArray(shader->vao_id);
 
 	/* Get a handle for our "MVP" uniform */
 	shader->mvp_matrix_id = glGetUniformLocation(shader->program_id, "u_MVPMatrix");
@@ -3484,6 +3464,8 @@ static void setup_filled_wireframe_shader(struct graph_dev_gl_filled_wireframe_s
 	shader->program_id = load_shaders(shader_directory,
 					"wireframe_filled.vert", "wireframe_filled.frag",
 					UNIVERSAL_SHADER_HEADER);
+	/* create the VAO for this shader */
+	glGenVertexArrays(1, &shader->vao_id);
 
 	shader->viewport_id = glGetUniformLocation(shader->program_id, "Viewport");
 	shader->mvp_matrix_id = glGetUniformLocation(shader->program_id, "ModelViewProjectionMatrix");
@@ -3509,6 +3491,8 @@ static void setup_trans_wireframe_shader(const char *basename, struct graph_dev_
 	/* Create and compile our GLSL program from the shaders */
 	shader->program_id = load_shaders(shader_directory, vert_filename, frag_filename,
 						UNIVERSAL_SHADER_HEADER);
+	/* create the VAO for this shader */
+	glGenVertexArrays(1, &shader->vao_id);
 
 	shader->mvp_matrix_id = glGetUniformLocation(shader->program_id, "u_MVPMatrix");
 	shader->mv_matrix_id = glGetUniformLocation(shader->program_id, "u_MVMatrix");
@@ -3527,6 +3511,8 @@ static void setup_single_color_shader(struct graph_dev_gl_single_color_shader *s
 	shader->program_id = load_shaders(shader_directory,
 				"single_color.vert", "single_color.frag",
 				UNIVERSAL_SHADER_HEADER);
+	/* create the VAO for this shader */
+	glGenVertexArrays(1, &shader->vao_id);
 
 	/* Get a handle for our "MVP" uniform */
 	shader->mvp_matrix_id = glGetUniformLocation(shader->program_id, "u_MVPMatrix");
@@ -3542,6 +3528,8 @@ static void setup_vertex_color_shader(struct graph_dev_gl_vertex_color_shader *s
 	shader->program_id = load_shaders(shader_directory,
 				"per_vertex_color.vert", "per_vertex_color.frag",
 				UNIVERSAL_SHADER_HEADER);
+	/* create the VAO for this shader */
+	glGenVertexArrays(1, &shader->vao_id);
 
 	shader->mvp_matrix_id = glGetUniformLocation(shader->program_id, "u_MVPMatrix");
 
@@ -3556,6 +3544,8 @@ static void setup_line_single_color_shader(struct graph_dev_gl_line_single_color
 	shader->program_id = load_shaders(shader_directory,
 				"line-single-color.vert", "line-single-color.frag",
 				UNIVERSAL_SHADER_HEADER);
+	/* create the VAO for this shader */
+	glGenVertexArrays(1, &shader->vao_id);
 
 	shader->mvp_matrix_id = glGetUniformLocation(shader->program_id, "u_MVPMatrix");
 	shader->viewport_id = glGetUniformLocation(shader->program_id, "u_Viewport");
@@ -3580,6 +3570,8 @@ static void setup_point_cloud_shader(const char *basename, struct graph_dev_gl_p
 	/* Create and compile our GLSL program from the shaders */
 	shader->program_id = load_shaders(shader_directory, vert_filename, frag_filename,
 				UNIVERSAL_SHADER_HEADER);
+	/* create the VAO for this shader */
+	glGenVertexArrays(1, &shader->vao_id);
 
 	/* Get a handle for our "MVP" uniform */
 	shader->mvp_matrix_id = glGetUniformLocation(shader->program_id, "u_MVPMatrix");
@@ -3597,6 +3589,8 @@ static void setup_color_by_w_shader(struct graph_dev_gl_color_by_w_shader *shade
 	/* Create and compile our GLSL program from the shaders */
 	shader->program_id = load_shaders(shader_directory, "color_by_w.vert", "color_by_w.frag",
 					UNIVERSAL_SHADER_HEADER);
+	/* create the VAO for this shader */
+	glGenVertexArrays(1, &shader->vao_id);
 
 	/* Get a handle for our "MVP" uniform */
 	shader->mvp_id = glGetUniformLocation(shader->program_id, "u_MVPMatrix");
@@ -3618,7 +3612,11 @@ static void setup_skybox_shader(struct graph_dev_gl_skybox_shader *shader)
 	/* Create and compile our GLSL program from the shaders */
 	shader->program_id = load_shaders(shader_directory, "skybox.vert", "skybox.frag",
 						UNIVERSAL_SHADER_HEADER FILMIC_TONEMAPPING);
+	/* create the VAO for this shader */
+	glGenVertexArrays(1, &shader->vao_id);
+
 	glUseProgram(shader->program_id);
+	glBindVertexArray(shader->vao_id);
 
 	/* Get a handle for our "MVP" uniform */
 	shader->mvp_id = glGetUniformLocation(shader->program_id, "MVP");
@@ -3722,7 +3720,11 @@ static void setup_textured_particle_shader(struct graph_dev_gl_textured_particle
 	shader->program_id = load_shaders(shader_directory,
 				"textured-particle.vert", "textured-particle.frag",
 				UNIVERSAL_SHADER_HEADER FILMIC_TONEMAPPING);
+	/* create the VAO for this shader */
+	glGenVertexArrays(1, &shader->vao_id);
+
 	glUseProgram(shader->program_id);
+	glBindVertexArray(shader->vao_id);
 
 	shader->mvp_matrix_id = glGetUniformLocation(shader->program_id, "u_MVPMatrix");
 	shader->camera_up_vec_id = glGetUniformLocation(shader->program_id, "u_CameraUpVec");
@@ -3762,7 +3764,11 @@ static void setup_fs_effect_shader(const char *basename,
 	maybe_unload_shader(&shader->meta, &shader->program_id);
 	shader->program_id = load_concat_shaders(shader_directory, vert_header, 1, filenames,
 		frag_header, 1, filenames);
+	/* create the VAO for this shader */
+	glGenVertexArrays(1, &shader->vao_id);
+
 	glUseProgram(shader->program_id);
+	glBindVertexArray(shader->vao_id);
 
 	shader->mvp_matrix_id = glGetUniformLocation(shader->program_id, "u_MVPMatrix");
 	shader->vertex_position_id = glGetAttribLocation(shader->program_id, "a_Position");
@@ -3801,6 +3807,8 @@ static void setup_smaa_effect_shader(const char *basename, struct graph_dev_gl_f
 	maybe_unload_shader(&shader->meta, &shader->program_id);
 	shader->program_id = load_concat_shaders(shader_directory,
 				vert_header, 3, filenames, frag_header, 3, filenames);
+	/* create the VAO for this shader */
+	glGenVertexArrays(1, &shader->vao_id);
 
 	shader->mvp_matrix_id = glGetUniformLocation(shader->program_id, "u_MVPMatrix");
 	shader->vertex_position_id = glGetAttribLocation(shader->program_id, "a_Position");
@@ -3821,6 +3829,8 @@ static void setup_smaa_effect(struct graph_dev_smaa_effect *effect)
 	setup_smaa_effect_shader("smaa-edge", shader);
 
 	glUseProgram(shader->program_id);
+	glBindVertexArray(shader->vao_id);
+
 	shader->texture0_id = glGetUniformLocation(shader->program_id, "u_AlbedoTex");
 	glUniform1i(shader->texture0_id, 0);
 
@@ -3828,6 +3838,8 @@ static void setup_smaa_effect(struct graph_dev_smaa_effect *effect)
 	setup_smaa_effect_shader("smaa-blend", shader);
 
 	glUseProgram(shader->program_id);
+	glBindVertexArray(shader->vao_id);
+
 	shader->texture0_id = glGetUniformLocation(shader->program_id, "u_EdgeTex");
 	glUniform1i(shader->texture0_id, 0);
 	shader->texture1_id = glGetUniformLocation(shader->program_id, "u_AreaTex");
@@ -3839,6 +3851,8 @@ static void setup_smaa_effect(struct graph_dev_smaa_effect *effect)
 	setup_smaa_effect_shader("smaa-neighborhood", shader);
 
 	glUseProgram(shader->program_id);
+	glBindVertexArray(shader->vao_id);
+
 	shader->texture0_id = glGetUniformLocation(shader->program_id, "u_AlbedoTex");
 	glUniform1i(shader->texture0_id, 0);
 	shader->texture1_id = glGetUniformLocation(shader->program_id, "u_BlendTex");
