@@ -58,4 +58,3 @@ libopus.a
 # cmake build trees.
 /build*
 /cmake-*build
-

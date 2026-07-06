@@ -27,6 +27,7 @@
 #include "snis_typeface.h"
 #include "opengl_cap.h"
 #include "png_utils.h"
+#include "snis_profile.h"
 #include "workqueue.h"
 
 /* helper function for sizing*/
@@ -108,13 +109,20 @@ static struct loaded_cubemap_texture loaded_cubemap_textures[MAX_LOADED_CUBEMAP_
 
 static int draw_normal_lines = 0;
 static int draw_billboard_wireframe = 0;
+static int draw_msaa_samples = 0;
+static int draw_render_to_texture = 0;
+static int draw_smaa = 0;
+static int draw_smaa_edge = 0;
+static int draw_smaa_blend = 0;
 static int draw_atmospheres = 1;
 static int filmic_tonemapping = 1;
 static float tonemapping_gain = 1.18;
 int graph_dev_planet_specularity = 1;
 int graph_dev_atmosphere_ring_shadows = 1;
 static const char *default_shader_directory = "share/snis/shader-es";
-static char *shader_directory = NULL;
+static char shader_directory[PATH_MAX];
+
+static GLenum fbo_format = GL_RGBA4;
 
 struct mesh_gl_info {
 	/* common buffer to hold vertex positions */
@@ -186,6 +194,7 @@ struct vertex_particle_buffer_data {
 
 static void graph_dev_gen_texture_maybe_lock(int count, GLuint *texture_name, int lock)
 {
+	PROFILE_ZONE_START("graph_dev_gen_texture_maybe_lock");
 	glGenTextures(count, texture_name);
 
 	/* Using texture names as index into an array is a sketchy as hell, should
@@ -199,20 +208,26 @@ static void graph_dev_gen_texture_maybe_lock(int count, GLuint *texture_name, in
 		texture_finished_loading[texture_name[i]] = 0;
 	if (lock)
 		pthread_mutex_unlock(&finished_loading_mutex);
+	PROFILE_ZONE_END();
 }
 
 static void graph_dev_gen_texture(int count, GLuint *texture_name)
 {
+	PROFILE_ZONE_START("graph_dev_gen_texture");
 	graph_dev_gen_texture_maybe_lock(count, texture_name, 1);
+	PROFILE_ZONE_END();
 }
 
 static void graph_dev_gen_texture_no_lock(int count, GLuint *texture_name)
 {
+	PROFILE_ZONE_START("graph_dev_gen_texture_no_lock");
 	graph_dev_gen_texture_maybe_lock(count, texture_name, 0);
+	PROFILE_ZONE_END();
 }
 
 void mesh_graph_dev_cleanup(struct mesh *m)
 {
+	PROFILE_ZONE_START("mesh_graph_dev_cleanup");
 	if (m->graph_ptr) {
 		struct mesh_gl_info *ptr = m->graph_ptr;
 
@@ -229,11 +244,13 @@ void mesh_graph_dev_cleanup(struct mesh *m)
 		free(ptr);
 		m->graph_ptr = 0;
 	}
+	PROFILE_ZONE_END();
 }
 
 /* load/reload an array buffer using stream draw if it is being overwritten */
 #define LOAD_BUFFER(buffer_type, buffer_id, buffer_size, buffer_data) \
 	do { \
+		PROFILE_ZONE_START("LOAD_BUFFER"); \
 		GLenum usage; \
 		if ((buffer_id) == 0) { \
 			usage = GL_STATIC_DRAW; \
@@ -242,10 +259,13 @@ void mesh_graph_dev_cleanup(struct mesh *m)
 			usage = GL_STREAM_DRAW; \
 		glBindBuffer((buffer_type), (buffer_id)); \
 		glBufferData((buffer_type), (buffer_size), (buffer_data), usage); \
+		PROFILE_ZONE_END(); \
 	} while (0)
 
 void mesh_graph_dev_init(struct mesh *m)
 {
+	PROFILE_ZONE_START("mesh_graph_dev_init");
+
 	struct mesh_gl_info *ptr = m->graph_ptr;
 	if (!ptr) {
 		ptr = malloc(sizeof(struct mesh_gl_info));
@@ -682,6 +702,8 @@ void mesh_graph_dev_init(struct mesh *m)
 		free(g_v_buffer_data);
 		free(g_i_buffer_data);
 	}
+
+	PROFILE_ZONE_END();
 }
 
 struct graph_dev_gl_shader_metadata {
@@ -690,15 +712,40 @@ struct graph_dev_gl_shader_metadata {
 
 static void maybe_unload_shader(struct graph_dev_gl_shader_metadata *meta, GLuint *program_id)
 {
+	PROFILE_ZONE_START("maybe_unload_shader");
 	if (meta->program_id && *meta->program_id != (GLuint) -1) /* Shader is currently loaded? */
 		glDeleteProgram(*meta->program_id); /* Unload shader */
 	meta->program_id = program_id;
 	*meta->program_id = -1;
+	PROFILE_ZONE_END();
+}
+
+struct graph_dev_gl_shader_common {
+	struct graph_dev_gl_shader_metadata meta;
+	GLuint program_id;
+	GLuint vao_id;
+};
+
+static GLuint drawstate_active_program = 0;
+#define GLES_HAS_VAO		(GLAD_GL_OES_vertex_array_object)
+
+static void
+activate_shader(const void *vptr)
+{
+	const struct graph_dev_gl_shader_common *shader = (const struct graph_dev_gl_shader_common *)vptr;
+	if (drawstate_active_program == shader->program_id) {
+		return;
+	}
+	glUseProgram(shader->program_id);
+	if (GLAD_GL_OES_vertex_array_object) {
+		glBindVertexArrayOES(shader->vao_id);
+	}
 }
 
 struct graph_dev_gl_vertex_color_shader {
 	struct graph_dev_gl_shader_metadata meta;
 	GLuint program_id;
+	GLuint vao_id;
 	GLint mvp_matrix_id;
 	GLint vertex_position_id;
 	GLint vertex_color_id;
@@ -707,6 +754,7 @@ struct graph_dev_gl_vertex_color_shader {
 struct graph_dev_gl_single_color_lit_shader {
 	struct graph_dev_gl_shader_metadata meta;
 	GLuint program_id;
+	GLuint vao_id;
 	GLint mvp_matrix_id;
 	GLint mv_matrix_id;
 	GLint normal_matrix_id;
@@ -723,6 +771,7 @@ struct graph_dev_gl_single_color_lit_shader {
 struct graph_dev_gl_atmosphere_shader {
 	struct graph_dev_gl_shader_metadata meta;
 	GLuint program_id;
+	GLuint vao_id;
 	GLint mvp_matrix_id;
 	GLint mv_matrix_id;
 	GLint normal_matrix_id;
@@ -745,6 +794,7 @@ struct graph_dev_gl_atmosphere_shader {
 struct graph_dev_gl_filled_wireframe_shader {
 	struct graph_dev_gl_shader_metadata meta;
 	GLuint program_id;
+	GLuint vao_id;
 	GLint viewport_id;
 	GLint mvp_matrix_id;
 	GLint position_id;
@@ -759,6 +809,7 @@ struct graph_dev_gl_filled_wireframe_shader {
 struct graph_dev_gl_trans_wireframe_shader {
 	struct graph_dev_gl_shader_metadata meta;
 	GLuint program_id;
+	GLuint vao_id;
 	GLint mvp_matrix_id;
 	GLint mv_matrix_id;
 	GLint normal_matrix_id;
@@ -773,6 +824,7 @@ struct graph_dev_gl_trans_wireframe_shader {
 struct graph_dev_gl_single_color_shader {
 	struct graph_dev_gl_shader_metadata meta;
 	GLuint program_id;
+	GLuint vao_id;
 	GLint mvp_matrix_id;
 	GLint vertex_position_id;
 	GLint color_id;
@@ -781,6 +833,7 @@ struct graph_dev_gl_single_color_shader {
 struct graph_dev_gl_line_single_color_shader {
 	struct graph_dev_gl_shader_metadata meta;
 	GLuint program_id;
+	GLuint vao_id;
 	GLint mvp_matrix_id;
 	GLint viewport_id;
 	GLint multi_one_id;
@@ -795,6 +848,7 @@ struct graph_dev_gl_line_single_color_shader {
 struct graph_dev_gl_point_cloud_shader {
 	struct graph_dev_gl_shader_metadata meta;
 	GLuint program_id;
+	GLuint vao_id;
 	GLint mvp_matrix_id;
 	GLint vertex_position_id;
 	GLint point_size_id;
@@ -805,6 +859,7 @@ struct graph_dev_gl_point_cloud_shader {
 struct graph_dev_gl_skybox_shader {
 	struct graph_dev_gl_shader_metadata meta;
 	GLuint program_id;
+	GLuint vao_id;
 	GLint mvp_id;
 	GLint vertex_id;
 	GLint texture_id;
@@ -816,6 +871,7 @@ struct graph_dev_gl_skybox_shader {
 struct graph_dev_gl_color_by_w_shader {
 	struct graph_dev_gl_shader_metadata meta;
 	GLuint program_id;
+	GLuint vao_id;
 	GLint mvp_id;
 	GLint position_id;
 	GLint near_color_id;
@@ -829,6 +885,7 @@ struct graph_dev_gl_color_by_w_shader {
 struct graph_dev_gl_textured_shader {
 	struct graph_dev_gl_shader_metadata meta;
 	GLuint program_id;
+	GLuint vao_id;
 	GLint mvp_matrix_id;
 	GLint mv_matrix_id;
 	GLint normal_matrix_id;
@@ -892,6 +949,7 @@ struct shadow_annulus_data {
 struct graph_dev_gl_textured_particle_shader {
 	struct graph_dev_gl_shader_metadata meta;
 	GLuint program_id;
+	GLuint vao_id;
 	GLint mvp_matrix_id;
 	GLint camera_up_vec_id;
 	GLint camera_right_vec_id;
@@ -912,6 +970,7 @@ struct graph_dev_gl_textured_particle_shader {
 struct graph_dev_gl_fs_effect_shader { /* For full screen effect shaders */
 	struct graph_dev_gl_shader_metadata meta;
 	GLuint program_id;
+	GLuint vao_id;
 	GLint mvp_matrix_id;
 	GLint vertex_position_id;
 	GLint texture_coord_id;
@@ -930,6 +989,18 @@ struct fbo_target {
 	int samples;
 	int width;
 	int height;
+};
+
+struct graph_dev_smaa_effect {
+	struct fbo_target edge_target;
+	struct fbo_target blend_target;
+
+	struct graph_dev_gl_fs_effect_shader edge_shader;
+	struct graph_dev_gl_fs_effect_shader blend_shader;
+	struct graph_dev_gl_fs_effect_shader neighborhood_shader;
+
+	GLuint area_tex;
+	GLuint search_tex;
 };
 
 /* store all the shader parameters */
@@ -964,6 +1035,12 @@ static struct graph_dev_gl_textured_particle_shader textured_particle_shader;
 static struct graph_dev_gl_textured_shader alpha_by_normal_shader;
 static struct graph_dev_gl_textured_shader textured_alpha_by_normal_shader;
 static struct graph_dev_gl_fs_effect_shader fs_copy_shader;
+static struct graph_dev_smaa_effect smaa_effect;
+
+static struct fbo_target msaa = { 0 };
+static struct fbo_target post_target0 = { 0 };
+static struct fbo_target post_target1 = { 0 };
+static struct fbo_target render_target_2d = { 0 };
 
 struct graph_dev_primitive {
 	int nvertices;
@@ -983,9 +1060,11 @@ static struct graph_dev_gl_context {
 	struct graph_dev_color *hue; /* current color */
 	int alpha_blend;
 	float alpha;
+	GLuint fbo_current;
 
 	int active_vp; /* 0=none, 1=2d, 2=3d */
 	int vp_x_3d, vp_y_3d, vp_width_3d, vp_height_3d;
+	GLuint fbo_2d;
 	struct mat44 ortho_2d_mvp;
 
 	int nvertex_2d;
@@ -994,6 +1073,7 @@ static struct graph_dev_gl_context {
 	GLuint vertex_buffer_2d;
 
 	struct mesh_gl_info gl_info_3d_line;
+	GLuint fbo_3d;
 	int texture_unit_active;
 	GLuint texture_unit_bind[4];
 	GLenum src_blend_func;
@@ -1004,6 +1084,7 @@ static struct graph_dev_gl_context {
 
 #define BIND_TEXTURE(tex_unit, tex_type, tex_id) \
 	do { \
+		PROFILE_ZONE_START("BIND_TEXTURE"); \
 		int tex_offset = tex_unit - GL_TEXTURE0; \
 		if (sgc.texture_unit_active != tex_offset) { \
 			glActiveTexture(tex_unit); \
@@ -1013,19 +1094,23 @@ static struct graph_dev_gl_context {
 			glBindTexture(tex_type, tex_id); \
 			sgc.texture_unit_bind[tex_offset] = tex_id; \
 		} \
+		PROFILE_ZONE_END(); \
 	} while (0)
 
 #define BLEND_FUNC(src_blend, dest_blend) \
 	do { \
+		PROFILE_ZONE_START("BLEND_FUNC"); \
 		if (sgc.src_blend_func != src_blend || sgc.dest_blend_func != dest_blend) { \
 			glBlendFunc(src_blend, dest_blend); \
 			sgc.src_blend_func = src_blend; \
 			sgc.dest_blend_func = dest_blend; \
 		} \
+		PROFILE_ZONE_END(); \
 	} while (0)
 
 #define VIEWPORT(x, y, width, height) \
 	do { \
+		PROFILE_ZONE_START("VIEWPORT"); \
 		if (sgc.vp_x != x || sgc.vp_y != y || sgc.vp_width != width || sgc.vp_height != height) { \
 			glViewport(x, y, width, height); \
 			sgc.vp_x = x; \
@@ -1033,6 +1118,7 @@ static struct graph_dev_gl_context {
 			sgc.vp_width = width; \
 			sgc.vp_height = height; \
 		} \
+		PROFILE_ZONE_END(); \
 	} while (0)
 
 static void print_framebuffer_error(void)
@@ -1050,7 +1136,7 @@ static void print_framebuffer_error(void)
 		break;
 
 	case GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT:
-		printf("FBO Duplicate attachment.\n");
+		printf("FBO Incomplete attachment.\n");
 		break;
 
 	case GL_FRAMEBUFFER_INCOMPLETE_DIMENSIONS:
@@ -1064,20 +1150,30 @@ static void print_framebuffer_error(void)
 
 static void resize_fbo_if_needed(struct fbo_target *target)
 {
+	PROFILE_ZONE_START("resize_fbo_if_needed");
+
+	glBindFramebuffer(GL_FRAMEBUFFER, target->fbo);
+
 	if (target->width != sgc.screen_x || target->height != sgc.screen_y) {
+		fprintf(stderr, "Resizing FBO %d attachments to %d x %d\n", target->fbo, sgc.screen_x, sgc.screen_y);
+
 		/* need to resize the fbo attachments */
 		if (target->color0_texture > 0) {
 			glBindTexture(GL_TEXTURE_2D, target->color0_texture);
-			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
-				sgc.screen_x, sgc.screen_y, 0, GL_RGB, GL_UNSIGNED_BYTE, 0);
+			if (GLAD_GL_EXT_texture_storage) {
+				glTexStorage2DEXT(GL_TEXTURE_2D, 1, fbo_format, sgc.screen_x, sgc.screen_y);
+			} else {
+				glTexImage2D(GL_TEXTURE_2D, 0, fbo_format,
+					sgc.screen_x, sgc.screen_y, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+			}
+			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, target->color0_texture, 0);
 		}
 
 		if (target->depth_buffer > 0) {
 			glBindRenderbuffer(GL_RENDERBUFFER, target->depth_buffer);
-			glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, sgc.screen_x, sgc.screen_y);
+			glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT16, sgc.screen_x, sgc.screen_y);
+			glFramebufferRenderbuffer(GL_RENDERBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, target->depth_buffer);
 		}
-
-		glBindFramebuffer(GL_FRAMEBUFFER, target->fbo);
 
 		GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
 		if (status != GL_FRAMEBUFFER_COMPLETE) {
@@ -1087,6 +1183,8 @@ static void resize_fbo_if_needed(struct fbo_target *target)
 		target->width = sgc.screen_x;
 		target->height = sgc.screen_y;
 	}
+
+	PROFILE_ZONE_END();
 }
 
 void graph_dev_set_screen_size(int width, int height)
@@ -1113,6 +1211,7 @@ void graph_dev_set_3d_viewport(int x_offset, int y_offset, int width, int height
 
 static void enable_2d_viewport(void)
 {
+	PROFILE_ZONE_START("enable_2d_viewport");
 	if (sgc.active_vp != 1) {
 		/* 2d viewport is entire screen */
 		VIEWPORT(0, 0, sgc.screen_x, sgc.screen_y);
@@ -1137,17 +1236,40 @@ static void enable_2d_viewport(void)
 		sgc.ortho_2d_mvp.m[3][2] = -(far + near) / (far - near);
 		sgc.ortho_2d_mvp.m[3][3] = 1;
 
+		if (sgc.fbo_2d > 0) {
+			if (sgc.fbo_current != sgc.fbo_2d) {
+				glBindFramebuffer(GL_FRAMEBUFFER, sgc.fbo_2d);
+				sgc.fbo_current = sgc.fbo_2d;
+			}
+		} else if (sgc.fbo_current != 0) {
+			glBindFramebuffer(GL_FRAMEBUFFER, 0);
+			sgc.fbo_current = 0;
+		}
+
 		sgc.active_vp = 1;
 	}
+	PROFILE_ZONE_END();
 }
 
 static void enable_3d_viewport(void)
 {
+	PROFILE_ZONE_START("enable_3d_viewport");
 	if (sgc.active_vp != 2) {
 		VIEWPORT(sgc.vp_x_3d, sgc.vp_y_3d, sgc.vp_width_3d, sgc.vp_height_3d);
 
+		if (sgc.fbo_3d > 0) {
+			if (sgc.fbo_current != sgc.fbo_3d) {
+				glBindFramebuffer(GL_FRAMEBUFFER, sgc.fbo_3d);
+				sgc.fbo_current = sgc.fbo_3d;
+			}
+		} else if (sgc.fbo_current != 0) {
+			glBindFramebuffer(GL_FRAMEBUFFER, 0);
+			sgc.fbo_current = 0;
+		}
+
 		sgc.active_vp = 2;
 	}
+	PROFILE_ZONE_END();
 }
 
 
@@ -1165,6 +1287,7 @@ void graph_dev_set_color(struct graph_dev_color *color, float a)
 
 static void draw_vertex_buffer_2d(void)
 {
+	PROFILE_ZONE_START("draw_vertex_buffer_2d");
 	if (sgc.nvertex_2d > 0) {
 		/* printf("start draw_vertex_buffer_2d %d\n", sgc.nvertex_2d); */
 		enable_2d_viewport();
@@ -1174,7 +1297,7 @@ static void draw_vertex_buffer_2d(void)
 		glBufferSubData(GL_ARRAY_BUFFER, 0, sgc.nvertex_2d * sizeof(struct vertex_color_buffer_data),
 			sgc.vertex_data_2d);
 
-		glUseProgram(vertex_color_shader.program_id);
+		activate_shader(&vertex_color_shader);
 
 		glUniformMatrix4fv(vertex_color_shader.mvp_matrix_id, 1, GL_FALSE, &sgc.ortho_2d_mvp.m[0][0]);
 
@@ -1240,26 +1363,30 @@ static void draw_vertex_buffer_2d(void)
 
 		sgc.nvertex_2d = 0;
 
-		glDisableVertexAttribArray(vertex_color_shader.vertex_position_id);
-		glDisableVertexAttribArray(vertex_color_shader.vertex_color_id);
-		glUseProgram(0);
+		if (!GLES_HAS_VAO) {
+			glDisableVertexAttribArray(vertex_color_shader.vertex_position_id);
+			glDisableVertexAttribArray(vertex_color_shader.vertex_color_id);
+		}
 
 		/* orphan this buffer so we don't get blocked on these draw commands */
-		glBindBuffer(GL_ARRAY_BUFFER, sgc.vertex_buffer_2d);
 		glBufferData(GL_ARRAY_BUFFER, VERTEX_BUFFER_2D_SIZE, 0, GL_STREAM_DRAW);
 	}
+	PROFILE_ZONE_END();
 }
 
 static void make_room_in_vertex_buffer_2d(int nvertices)
 {
+	PROFILE_ZONE_START("make_room_in_vertex_buffer_2d");
 	if (sgc.nvertex_2d + nvertices > BUFFERED_VERTICES_2D) {
 		/* buffer needs to be emptied to fit next batch */
 		draw_vertex_buffer_2d();
 	}
+	PROFILE_ZONE_END();
 }
 
 static void add_vertex_2d(float x, float y, struct graph_dev_color *color, GLubyte alpha, GLenum mode)
 {
+	PROFILE_ZONE_START("add_vertex_2d");
 	struct vertex_color_buffer_data *vertex = &sgc.vertex_data_2d[sgc.nvertex_2d];
 
 	/* setup the vertex and color */
@@ -1274,6 +1401,7 @@ static void add_vertex_2d(float x, float y, struct graph_dev_color *color, GLuby
 	sgc.vertex_type_2d[sgc.nvertex_2d] = mode;
 
 	sgc.nvertex_2d += 1;
+	PROFILE_ZONE_END();
 }
 
 #if DEBUG_NORMALS
@@ -1281,7 +1409,7 @@ static void graph_dev_draw_normal_lines(const struct mat44 *mat_mvp, struct mesh
 {
 	glEnable(GL_DEPTH_TEST);
 
-	glUseProgram(single_color_shader.program_id);
+	activate_shader(&simple_color_shader);
 
 	glUniformMatrix4fv(single_color_shader.mvp_matrix_id, 1, GL_FALSE, &mat_mvp->m[0][0]);
 
@@ -1327,8 +1455,9 @@ static void graph_dev_draw_normal_lines(const struct mat44 *mat_mvp, struct mesh
 	);
 	glDrawArrays(GL_LINES, 0, m->ntriangles * 3 * 2);
 
-	glDisableVertexAttribArray(single_color_shader.vertex_position_id);
-	glUseProgram(0);
+	if (!GLES_HAS_VAO) {
+		glDisableVertexAttribArray(single_color_shader.vertex_position_id);
+	}
 
 	glDisable(GL_DEPTH_TEST);
 }
@@ -1369,6 +1498,7 @@ struct raster_texture_params {
 
 static void graph_dev_raster_texture(struct raster_texture_params *p)
 {
+	PROFILE_ZONE_START("graph_dev_raster_texture");
 	const struct graph_dev_gl_textured_shader *shader = p->shader;
 
 	enable_3d_viewport();
@@ -1395,7 +1525,7 @@ static void graph_dev_raster_texture(struct raster_texture_params *p)
 		BLEND_FUNC(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 	}
 
-	glUseProgram(shader->program_id);
+	activate_shader(shader);
 
 	if (shader->texture_2d_id >= 0)
 		BIND_TEXTURE(GL_TEXTURE0, GL_TEXTURE_2D, p->texture_number);
@@ -1547,16 +1677,17 @@ static void graph_dev_raster_texture(struct raster_texture_params *p)
 
 	glDrawArrays(GL_TRIANGLES, 0, p->m->ntriangles * 3);
 
-	glDisableVertexAttribArray(shader->vertex_position_id);
-	if (shader->vertex_normal_id >= 0)
-		glDisableVertexAttribArray(shader->vertex_normal_id);
-	if (shader->vertex_tangent_id >= 0)
-		glDisableVertexAttribArray(shader->vertex_tangent_id);
-	if (shader->vertex_bitangent_id >= 0)
-		glDisableVertexAttribArray(shader->vertex_bitangent_id);
-	if (shader->texture_coord_id >= 0)
-		glDisableVertexAttribArray(shader->texture_coord_id);
-	glUseProgram(0);
+	if (!GLES_HAS_VAO) {
+		glDisableVertexAttribArray(shader->vertex_position_id);
+		if (shader->vertex_normal_id >= 0)
+			glDisableVertexAttribArray(shader->vertex_normal_id);
+		if (shader->vertex_tangent_id >= 0)
+			glDisableVertexAttribArray(shader->vertex_tangent_id);
+		if (shader->vertex_bitangent_id >= 0)
+			glDisableVertexAttribArray(shader->vertex_bitangent_id);
+		if (shader->texture_coord_id >= 0)
+			glDisableVertexAttribArray(shader->texture_coord_id);
+	}
 
 	glDisable(GL_DEPTH_TEST);
 	if (p->do_cullface)
@@ -1571,22 +1702,27 @@ static void graph_dev_raster_texture(struct raster_texture_params *p)
 		graph_dev_draw_normal_lines(p->mat_mvp, p->m, ptr);
 	}
 #endif
+	PROFILE_ZONE_END();
 }
 
 static void graph_dev_raster_single_color_lit(const struct mat44 *mat_mvp, const struct mat44 *mat_mv,
 	const struct mat33 *mat_normal, struct mesh *m, struct sng_color *triangle_color, union vec3 *eye_light_pos,
 	float in_shade, float ambient)
 {
+	PROFILE_ZONE_START("graph_dev_raster_single_color_lit");
 	enable_3d_viewport();
 
 	if (!m->graph_ptr)
+	{
+		PROFILE_ZONE_END();
 		return;
+	}
 
 	struct mesh_gl_info *ptr = m->graph_ptr;
 
 	glEnable(GL_DEPTH_TEST);
 	glEnable(GL_CULL_FACE);
-	glUseProgram(single_color_lit_shader.program_id);
+	activate_shader(&single_color_lit_shader);
 
 	glUniformMatrix4fv(single_color_lit_shader.mv_matrix_id, 1, GL_FALSE, &mat_mv->m[0][0]);
 	glUniformMatrix4fv(single_color_lit_shader.mvp_matrix_id, 1, GL_FALSE, &mat_mvp->m[0][0]);
@@ -1624,10 +1760,10 @@ static void graph_dev_raster_single_color_lit(const struct mat44 *mat_mvp, const
 
 	glDrawArrays(GL_TRIANGLES, 0, m->ntriangles * 3);
 
-	glDisableVertexAttribArray(single_color_lit_shader.vertex_position_id);
-	glDisableVertexAttribArray(single_color_lit_shader.vertex_normal_id);
-	glUseProgram(0);
-
+	if (!GLES_HAS_VAO) {
+		glDisableVertexAttribArray(single_color_lit_shader.vertex_position_id);
+		glDisableVertexAttribArray(single_color_lit_shader.vertex_normal_id);
+	}
 	glDisable(GL_DEPTH_TEST);
 	glDisable(GL_CULL_FACE);
 
@@ -1636,6 +1772,8 @@ static void graph_dev_raster_single_color_lit(const struct mat44 *mat_mvp, const
 		graph_dev_draw_normal_lines(mat_mvp, m, ptr);
 	}
 #endif
+
+	PROFILE_ZONE_END();
 }
 
 static void graph_dev_raster_atmosphere(const struct mat44 *mat_mvp, const struct mat44 *mat_mv,
@@ -1643,14 +1781,22 @@ static void graph_dev_raster_atmosphere(const struct mat44 *mat_mvp, const struc
 	struct mesh *m, struct sng_color *triangle_color, union vec3 *eye_light_pos, GLfloat alpha,
 	struct shadow_annulus_data *shadow_annulus, float ring_texture_v, float atmosphere_brightness)
 {
+	PROFILE_ZONE_START("graph_dev_raster_atmosphere");
+
 	enable_3d_viewport();
 	struct graph_dev_gl_atmosphere_shader *shader;
 
 	if (!draw_atmospheres)
+	{
+		PROFILE_ZONE_END();
 		return;
+	}
 
 	if (!m->graph_ptr)
+	{
+		PROFILE_ZONE_END();
 		return;
+	}
 
 	struct mesh_gl_info *ptr = m->graph_ptr;
 
@@ -1665,7 +1811,7 @@ static void graph_dev_raster_atmosphere(const struct mat44 *mat_mvp, const struc
 	if (ring_texture_v >= 0.0 && graph_dev_atmosphere_ring_shadows) {
 		/* Set up uniforms for ring shadow */
 		shader = &atmosphere_with_annulus_shadow_shader;
-		glUseProgram(shader->program_id);
+		activate_shader(shader);
 		if (shadow_annulus->texture_id > 0 && shader->shadow_annulus_texture_id > 0)
 			BIND_TEXTURE(GL_TEXTURE0, GL_TEXTURE_2D, shadow_annulus->texture_id);
 
@@ -1690,7 +1836,7 @@ static void graph_dev_raster_atmosphere(const struct mat44 *mat_mvp, const struc
 
 	} else {
 		shader = &atmosphere_shader;
-		glUseProgram(shader->program_id);
+		activate_shader(shader);
 	}
 
 	glUniform1f(shader->atmosphere_brightness_id, atmosphere_brightness);
@@ -1728,9 +1874,10 @@ static void graph_dev_raster_atmosphere(const struct mat44 *mat_mvp, const struc
 
 	glDrawArrays(GL_TRIANGLES, 0, m->ntriangles * 3);
 
-	glDisableVertexAttribArray(shader->vertex_position_id);
-	glDisableVertexAttribArray(shader->vertex_normal_id);
-	glUseProgram(0);
+	if (!GLES_HAS_VAO) {
+		glDisableVertexAttribArray(shader->vertex_position_id);
+		glDisableVertexAttribArray(shader->vertex_normal_id);
+	}
 
 	glDisable(GL_DEPTH_TEST);
 	glDisable(GL_CULL_FACE);
@@ -1741,22 +1888,29 @@ static void graph_dev_raster_atmosphere(const struct mat44 *mat_mvp, const struc
 		graph_dev_draw_normal_lines(mat_mvp, m, ptr);
 	}
 #endif
+
+	PROFILE_ZONE_END();
 }
 
 static void graph_dev_raster_filled_wireframe_mesh(const struct mat44 *mat_mvp, struct mesh *m,
 	struct sng_color *line_color, struct sng_color *triangle_color)
 {
+	PROFILE_ZONE_START("graph_dev_raster_filled_wireframe_mesh");
+
 	enable_3d_viewport();
 
 	if (!m->graph_ptr)
+	{
+		PROFILE_ZONE_END();
 		return;
+	}
 
 	struct mesh_gl_info *ptr = m->graph_ptr;
 
 	glEnable(GL_DEPTH_TEST);
 	glEnable(GL_CULL_FACE);
 
-	glUseProgram(filled_wireframe_shader.program_id);
+	activate_shader(&filled_wireframe_shader);
 
 	glUniform2f(filled_wireframe_shader.viewport_id, sgc.vp_width_3d, sgc.vp_height_3d);
 	glUniformMatrix4fv(filled_wireframe_shader.mvp_matrix_id, 1, GL_FALSE, &mat_mvp->m[0][0]);
@@ -1823,8 +1977,13 @@ static void graph_dev_raster_filled_wireframe_mesh(const struct mat44 *mat_mvp, 
 
 	glDrawArrays(GL_TRIANGLES, 0, ptr->ntriangles*3);
 
-	glDisableVertexAttribArray(filled_wireframe_shader.position_id);
-	glUseProgram(0);
+	if (!GLES_HAS_VAO) {
+		glDisableVertexAttribArray(filled_wireframe_shader.position_id);
+		glDisableVertexAttribArray(filled_wireframe_shader.tvertex0_id);
+		glDisableVertexAttribArray(filled_wireframe_shader.tvertex1_id);
+		glDisableVertexAttribArray(filled_wireframe_shader.tvertex2_id);
+		glDisableVertexAttribArray(filled_wireframe_shader.edge_mask_id);
+	}
 
 	glDisable(GL_DEPTH_TEST);
 	glDisable(GL_CULL_FACE);
@@ -1834,6 +1993,8 @@ static void graph_dev_raster_filled_wireframe_mesh(const struct mat44 *mat_mvp, 
 		graph_dev_draw_normal_lines(mat_mvp, m, ptr);
 	}
 #endif
+
+	PROFILE_ZONE_END();
 }
 
 static void graph_dev_raster_trans_wireframe_mesh(struct graph_dev_gl_trans_wireframe_shader *shader,
@@ -1841,10 +2002,14 @@ static void graph_dev_raster_trans_wireframe_mesh(struct graph_dev_gl_trans_wire
 		const struct mat33 *mat_normal, struct mesh *m, struct sng_color *line_color,
 		struct clip_sphere_data *clip_sphere, int do_cullface)
 {
+	PROFILE_ZONE_START("graph_dev_raster_trans_wireframe_mesh");
+
 	enable_3d_viewport();
 
-	if (!m->graph_ptr)
+	if (!m->graph_ptr) {
+		PROFILE_ZONE_END();
 		return;
+	}
 
 	struct mesh_gl_info *ptr = m->graph_ptr;
 
@@ -1853,7 +2018,8 @@ static void graph_dev_raster_trans_wireframe_mesh(struct graph_dev_gl_trans_wire
 	if (do_cullface) {
 		assert(shader);
 		assert(clip_sphere);
-		glUseProgram(shader->program_id);
+
+		activate_shader(shader);
 
 		glUniformMatrix4fv(shader->mvp_matrix_id, 1, GL_FALSE, &mat_mvp->m[0][0]);
 		glUniformMatrix4fv(shader->mv_matrix_id, 1, GL_FALSE, &mat_mv->m[0][0]);
@@ -1892,7 +2058,7 @@ static void graph_dev_raster_trans_wireframe_mesh(struct graph_dev_gl_trans_wire
 
 	} else {
 		/* don't cullface so just render with single color shader */
-		glUseProgram(single_color_shader.program_id);
+		activate_shader(&single_color_shader);
 
 		glUniformMatrix4fv(single_color_shader.mvp_matrix_id, 1, GL_FALSE, &mat_mvp->m[0][0]);
 		glUniform4f(single_color_shader.color_id, line_color->red,
@@ -1912,14 +2078,14 @@ static void graph_dev_raster_trans_wireframe_mesh(struct graph_dev_gl_trans_wire
 
 	glDrawArrays(GL_LINES, 0, ptr->nwireframe_lines * 2);
 
-	if (do_cullface) {
-		glDisableVertexAttribArray(shader->vertex_position_id);
-		glDisableVertexAttribArray(shader->vertex_normal_id);
-	} else {
-		glDisableVertexAttribArray(single_color_shader.vertex_position_id);
+	if (!GLES_HAS_VAO) {
+		if (do_cullface) {
+			glDisableVertexAttribArray(shader->vertex_position_id);
+			glDisableVertexAttribArray(shader->vertex_normal_id);
+		} else {
+			glDisableVertexAttribArray(single_color_shader.vertex_position_id);
+		}
 	}
-
-	glUseProgram(0);
 
 	glDisable(GL_DEPTH_TEST);
 
@@ -1928,15 +2094,23 @@ static void graph_dev_raster_trans_wireframe_mesh(struct graph_dev_gl_trans_wire
 		graph_dev_draw_normal_lines(mat_mvp, m, ptr);
 	}
 #endif
+
+	PROFILE_ZONE_END();
 }
 
 static void graph_dev_raster_line_mesh(struct entity *e, const struct mat44 *mat_mvp, struct mesh *m,
 					struct sng_color *line_color)
 {
+	PROFILE_ZONE_START("graph_dev_raster_line_mesh");
+
 	enable_3d_viewport();
 
-	if (!m->graph_ptr)
+	if (!m->graph_ptr) {
+		PROFILE_ZONE_END();
 		return;
+	}
+
+	PROFILE_ZONE_START_CTX(p_setup, "graph_dev_raster_line_mesh:setup");
 
 	struct mesh_gl_info *ptr = m->graph_ptr;
 
@@ -1947,7 +2121,7 @@ static void graph_dev_raster_line_mesh(struct entity *e, const struct mat44 *mat
 	if (e->material_ptr && e->material_ptr->type == MATERIAL_COLOR_BY_W) {
 		struct material_color_by_w *mc = &e->material_ptr->color_by_w;
 
-		glUseProgram(color_by_w_shader.program_id);
+		activate_shader(&color_by_w_shader);
 
 		glUniformMatrix4fv(color_by_w_shader.mvp_id, 1, GL_FALSE, &mat_mvp->m[0][0]);
 
@@ -1968,7 +2142,7 @@ static void graph_dev_raster_line_mesh(struct entity *e, const struct mat44 *mat
 
 		vertex_position_id = color_by_w_shader.position_id;
 	} else {
-		glUseProgram(line_single_color_shader.program_id);
+		activate_shader(&line_single_color_shader);
 
 		glUniformMatrix4fv(line_single_color_shader.mvp_matrix_id, 1, GL_FALSE, &mat_mvp->m[0][0]);
 		glUniform2f(line_single_color_shader.viewport_id, sgc.vp_width_3d, sgc.vp_height_3d);
@@ -1979,6 +2153,8 @@ static void graph_dev_raster_line_mesh(struct entity *e, const struct mat44 *mat
 			line_color->blue, 1.0);
 
 		vertex_position_id = line_single_color_shader.vertex_position_id;
+
+		PROFILE_ZONE_START_CTX(p_color_arrays, "graph_dev_raster_line_mesh:upload_color_arrays");
 
 		glEnableVertexAttribArray(line_single_color_shader.multi_one_id);
 		glBindBuffer(GL_ARRAY_BUFFER, ptr->line_vertex_buffer);
@@ -2010,10 +2186,12 @@ static void graph_dev_raster_line_mesh(struct entity *e, const struct mat44 *mat
 			GL_FLOAT,
 			GL_FALSE,
 			sizeof(struct vertex_line_buffer_data),
-			(void *)offsetof(struct vertex_line_buffer_data, line_vertex1.v.x)
-	);
+			(void *)offsetof(struct vertex_line_buffer_data, line_vertex1.v.x));
 
+		PROFILE_ZONE_END_CTX(p_color_arrays);
 	}
+
+	PROFILE_ZONE_START_CTX(p_vertexbuffer, "graph_dev_raster_line_mesh:upload_vertex_buffer");
 
 	glEnableVertexAttribArray(vertex_position_id);
 	glBindBuffer(GL_ARRAY_BUFFER, ptr->vertex_buffer);
@@ -2026,27 +2204,43 @@ static void graph_dev_raster_line_mesh(struct entity *e, const struct mat44 *mat
 		(void *)offsetof(struct vertex_buffer_data, position.v.x) /* array buffer offset */
 	);
 
+	PROFILE_ZONE_END_CTX(p_vertexbuffer);
+
+	PROFILE_ZONE_END_CTX(p_setup);
+	PROFILE_ZONE_START_CTX(p_render, "graph_dev_raster_line_mesh:draw");
+
 	glDrawArrays(GL_LINES, 0, ptr->nlines * 2);
 
-	glDisableVertexAttribArray(vertex_position_id);
-	if (e->material_ptr && e->material_ptr->type != MATERIAL_COLOR_BY_W) {
-		glDisableVertexAttribArray(line_single_color_shader.multi_one_id);
-		glDisableVertexAttribArray(line_single_color_shader.line_vertex0_id);
-		glDisableVertexAttribArray(line_single_color_shader.line_vertex1_id);
-	}
-	glUseProgram(0);
+	PROFILE_ZONE_END_CTX(p_render);
 
+	PROFILE_ZONE_START_CTX(p_cleanup, "graph_dev_raster_line_mesh:cleanup");
+	if (!GLES_HAS_VAO) {
+		glDisableVertexAttribArray(vertex_position_id);
+		if (e->material_ptr && e->material_ptr->type != MATERIAL_COLOR_BY_W) {
+			glDisableVertexAttribArray(line_single_color_shader.multi_one_id);
+			glDisableVertexAttribArray(line_single_color_shader.line_vertex0_id);
+			glDisableVertexAttribArray(line_single_color_shader.line_vertex1_id);
+		}
+	}
 	glDisable(GL_DEPTH_TEST);
+
+	PROFILE_ZONE_END_CTX(p_cleanup);
+
+	PROFILE_ZONE_END();
 }
 
 void graph_dev_raster_point_cloud_mesh(struct graph_dev_gl_point_cloud_shader *shader,
 	const struct mat44 *mat_mvp, struct mesh *m, struct sng_color *point_color, float alpha, float pointSize,
 	int do_blend)
 {
+	PROFILE_ZONE_START("graph_dev_raster_point_cloud_mesh");
+
 	enable_3d_viewport();
 
-	if (!m->graph_ptr)
+	if (!m->graph_ptr) {
+		PROFILE_ZONE_END();
 		return;
+	}
 
 	struct mesh_gl_info *ptr = m->graph_ptr;
 
@@ -2060,7 +2254,7 @@ void graph_dev_raster_point_cloud_mesh(struct graph_dev_gl_point_cloud_shader *s
 		BLEND_FUNC(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 	}
 
-	glUseProgram(shader->program_id);
+	activate_shader(shader);
 
 	glUniformMatrix4fv(shader->mvp_matrix_id, 1, GL_FALSE, &mat_mvp->m[0][0]);
 	glUniform1f(shader->point_size_id, pointSize);
@@ -2085,8 +2279,9 @@ void graph_dev_raster_point_cloud_mesh(struct graph_dev_gl_point_cloud_shader *s
 
 	glDrawArrays(GL_POINTS, 0, ptr->npoints);
 
-	glDisableVertexAttribArray(shader->vertex_position_id);
-	glUseProgram(0);
+	if (!GLES_HAS_VAO) {
+		glDisableVertexAttribArray(shader->vertex_position_id);
+	}
 
 	glDisable(GL_DEPTH_TEST);
 	// glDisable(GL_VERTEX_PROGRAM_POINT_SIZE);
@@ -2094,11 +2289,15 @@ void graph_dev_raster_point_cloud_mesh(struct graph_dev_gl_point_cloud_shader *s
 		glDepthMask(GL_TRUE);
 		glDisable(GL_BLEND);
 	}
+
+	PROFILE_ZONE_END();
 }
 
 static void graph_dev_draw_nebula(const struct mat44 *mat_mvp, const struct mat44 *mat_mv,
 	struct entity *e)
 {
+	PROFILE_ZONE_START("graph_dev_draw_nebula");
+
 	struct material_nebula *mt = &e->material_ptr->nebula;
 	struct raster_texture_params rtp = { 0 };
 
@@ -2159,16 +2358,21 @@ static void graph_dev_draw_nebula(const struct mat44 *mat_mvp, const struct mat4
 		}
 	}
 
+	PROFILE_ZONE_END();
 }
 
 static void graph_dev_raster_particle_animation(struct entity *e,
 	const struct entity_transform *transform, GLuint texture_number,
 	float particle_radius, float time_base)
 {
+	PROFILE_ZONE_START("graph_dev_raster_particle_animation");
+
 	enable_3d_viewport();
 
-	if (!e->m->graph_ptr)
+	if (!e->m->graph_ptr) {
+		PROFILE_ZONE_END();
 		return;
+	}
 
 	struct mesh_gl_info *ptr = e->m->graph_ptr;
 
@@ -2179,7 +2383,7 @@ static void graph_dev_raster_particle_animation(struct entity *e,
 	glEnable(GL_BLEND);
 	BLEND_FUNC(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
-	glUseProgram(textured_particle_shader.program_id);
+	activate_shader(&textured_particle_shader);
 
 	glUniformMatrix4fv(textured_particle_shader.mvp_matrix_id, 1, GL_FALSE, &transform->mvp.m[0][0]);
 
@@ -2300,14 +2504,15 @@ static void graph_dev_raster_particle_animation(struct entity *e,
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ptr->particle_index_buffer);
 	glDrawElements(GL_TRIANGLES, ptr->nparticles * 6, GL_UNSIGNED_SHORT, NULL);
 
-	glDisableVertexAttribArray(textured_particle_shader.multi_one_id);
-	glDisableVertexAttribArray(textured_particle_shader.start_position_id);
-	glDisableVertexAttribArray(textured_particle_shader.start_tint_color_id);
-	glDisableVertexAttribArray(textured_particle_shader.start_apm_id);
-	glDisableVertexAttribArray(textured_particle_shader.end_position_id);
-	glDisableVertexAttribArray(textured_particle_shader.end_tint_color_id);
-	glDisableVertexAttribArray(textured_particle_shader.end_apm_id);
-	glUseProgram(0);
+	if (!GLES_HAS_VAO) {
+		glDisableVertexAttribArray(textured_particle_shader.multi_one_id);
+		glDisableVertexAttribArray(textured_particle_shader.start_position_id);
+		glDisableVertexAttribArray(textured_particle_shader.start_tint_color_id);
+		glDisableVertexAttribArray(textured_particle_shader.start_apm_id);
+		glDisableVertexAttribArray(textured_particle_shader.end_position_id);
+		glDisableVertexAttribArray(textured_particle_shader.end_tint_color_id);
+		glDisableVertexAttribArray(textured_particle_shader.end_apm_id);
+	}
 
 	glDisable(GL_DEPTH_TEST);
 	glDepthMask(GL_TRUE);
@@ -2320,6 +2525,8 @@ static void graph_dev_raster_particle_animation(struct entity *e,
 		struct sng_color red = sng_get_color(RED);
 		graph_dev_raster_point_cloud_mesh(&point_cloud_shader, &transform->mvp, e->m, &red, 1.0, 3.0, 0);
 	}
+
+	PROFILE_ZONE_END();
 }
 
 extern int graph_dev_entity_render_order(struct entity *e)
@@ -2356,6 +2563,8 @@ extern int graph_dev_entity_render_order(struct entity *e)
 static void graph_dev_raster_triangle_mesh(struct entity_context *cx, struct entity *e,
 	union vec3 *eye_light_pos, const struct entity_transform *transform, struct sng_color *line_color)
 {
+	PROFILE_ZONE_START("graph_dev_raster_triangle_mesh");
+
 	struct camera_info *c = &cx->camera;
 	struct raster_texture_params rtp = { 0 };
 	struct sng_color atmosphere_color = { 0 };
@@ -2724,11 +2933,14 @@ static void graph_dev_raster_triangle_mesh(struct entity_context *cx, struct ent
 		graph_dev_raster_trans_wireframe_mesh(0, rtp.mat_mvp, rtp.mat_mv,
 			rtp.mat_normal, e->m, &white_color, 0, 0);
 	}
+
+	PROFILE_ZONE_END();
 }
 
 void graph_dev_draw_entity(struct entity_context *cx, struct entity *e, union vec3 *eye_light_pos,
 	const struct entity_transform *transform)
 {
+	PROFILE_ZONE_START("graph_dev_draw_entity");
 
 	draw_vertex_buffer_2d();
 
@@ -2736,6 +2948,7 @@ void graph_dev_draw_entity(struct entity_context *cx, struct entity *e, union ve
 
 	if (e->material_ptr && e->material_ptr->type == MATERIAL_NEBULA) {
 		graph_dev_draw_nebula(&transform->mvp, &transform->mv, e);
+		PROFILE_ZONE_END();
 		return;
 	}
 
@@ -2767,6 +2980,7 @@ void graph_dev_draw_entity(struct entity_context *cx, struct entity *e, union ve
 		}
 		break;
 	}
+	PROFILE_ZONE_END();
 }
 
 /* This implementation is ok for drawing a few times, but the performance
@@ -2774,6 +2988,8 @@ void graph_dev_draw_entity(struct entity_context *cx, struct entity *e, union ve
 void graph_dev_draw_3d_line(__attribute__((unused)) struct entity_context *cx, const struct mat44 *mat_vp,
 	float x1, float y1, float z1, float x2, float y2, float z2)
 {
+	PROFILE_ZONE_START("graph_dev_draw_3d_line");
+
 	draw_vertex_buffer_2d();
 
 	enable_3d_viewport();
@@ -2825,6 +3041,8 @@ void graph_dev_draw_3d_line(__attribute__((unused)) struct entity_context *cx, c
 
 	struct sng_color line_color = sng_get_foreground();
 	graph_dev_raster_line_mesh(&e, mat_vp, &m, &line_color);
+
+	PROFILE_ZONE_END();
 }
 
 static void graph_dev_raster_full_screen_effect(struct graph_dev_gl_fs_effect_shader *shader, GLuint texture0_id,
@@ -2832,7 +3050,9 @@ static void graph_dev_raster_full_screen_effect(struct graph_dev_gl_fs_effect_sh
 {
 	static const struct mat44 mat_identity = { { { 1, 0, 0, 0}, { 0, 1, 0, 0 }, { 0, 0, 1, 0}, { 0, 0, 0, 1} } };
 
-	glUseProgram(shader->program_id);
+	PROFILE_ZONE_START("graph_dev_raster_full_screen_effect");
+
+	activate_shader(shader);
 
 	if (texture0_id > 0 && shader->texture0_id >= 0) {
 		BIND_TEXTURE(GL_TEXTURE0, GL_TEXTURE_2D, texture0_id);
@@ -2882,18 +3102,25 @@ static void graph_dev_raster_full_screen_effect(struct graph_dev_gl_fs_effect_sh
 
 	glDrawArrays(GL_TRIANGLES, 0, textured_unit_quad.nvertices);
 
-	glDisableVertexAttribArray(shader->vertex_position_id);
-	glDisableVertexAttribArray(shader->texture_coord_id);
-	glUseProgram(0);
+	if (!GLES_HAS_VAO) {
+		glDisableVertexAttribArray(shader->vertex_position_id);
+		glDisableVertexAttribArray(shader->texture_coord_id);
+	}
+
+	PROFILE_ZONE_END();
 }
 
 /* If any textures loads (PNG decoding) have completed, send them to the GPU */
 static void graph_dev_send_completed_textures_to_gpu(void)
 {
+	PROFILE_ZONE_START("graph_dev_send_completed_textures_to_gpu");
 	do {
 		struct graph_dev_image_load_request *r = work_queue_dequeue(loaded_images_wq);
 		if (!r)
+		{
+			PROFILE_ZONE_END();
 			return;
+		}
 
 		switch (r->request_type) {
 		case GRAPH_DEV_IMAGE_LOAD:
@@ -2906,41 +3133,179 @@ static void graph_dev_send_completed_textures_to_gpu(void)
 			break;
 		}
 	} while (1);
+	// unreachable?
+	PROFILE_ZONE_END();
 }
 
 void graph_dev_start_frame(void)
 {
+	PROFILE_ZONE_START("graph_dev_start_frame");
+
 	graph_dev_send_completed_textures_to_gpu();
 
 	/* reset viewport to whole screen */
 	sgc.active_vp = 0;
 	VIEWPORT(0, 0, sgc.screen_x, sgc.screen_y);
 
+	glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+
+	if (draw_render_to_texture && render_target_2d.fbo > 0) {
+		resize_fbo_if_needed(&render_target_2d);
+		sgc.fbo_2d = render_target_2d.fbo;
+		glBindFramebuffer(GL_FRAMEBUFFER, render_target_2d.fbo);
+		glClear(GL_COLOR_BUFFER_BIT);
+	} else
+		sgc.fbo_2d = 0;
+
+	if (draw_msaa_samples > 0 && msaa.fbo > 0) {
+
+		// glEnable(GL_MULTISAMPLE);
+
+		glBindFramebuffer(GL_FRAMEBUFFER, msaa.fbo);
+		sgc.fbo_3d = msaa.fbo;
+#if 0
+		if (msaa.width != sgc.screen_x || msaa.height != sgc.screen_y || msaa.samples != draw_msaa_samples) {
+			/* need to rebuild the fbo attachments */
+			glBindRenderbuffer(GL_RENDERBUFFER, msaa.color0_buffer);
+			glRenderbufferStorageMultisample(GL_RENDERBUFFER, draw_msaa_samples, GL_RGBA8,
+				sgc.screen_x, sgc.screen_y);
+			glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER,
+				msaa.color0_buffer);
+
+			glBindRenderbuffer(GL_RENDERBUFFER, msaa.depth_buffer);
+			glRenderbufferStorageMultisample(GL_RENDERBUFFER, draw_msaa_samples, GL_DEPTH_COMPONENT,
+				sgc.screen_x, sgc.screen_y);
+			glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER,
+				msaa.depth_buffer);
+
+			msaa.width = sgc.screen_x;
+			msaa.height = sgc.screen_y;
+			msaa.samples = draw_msaa_samples;
+
+			GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+			if (status != GL_FRAMEBUFFER_COMPLETE) {
+				print_framebuffer_error();
+			}
+		}
+#endif
+
+	} else if (draw_render_to_texture && post_target0.fbo > 0) {
+
+		resize_fbo_if_needed(&post_target0);
+
+		glBindFramebuffer(GL_FRAMEBUFFER, post_target0.fbo);
+		sgc.fbo_3d = post_target0.fbo;
+	} else {
+		/* render direct to back buffer */
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		sgc.fbo_3d = 0;
+	}
+
 	/* clear the bound 3d buffer */
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	sgc.fbo_current = sgc.fbo_3d;
+
+	PROFILE_ZONE_END();
 }
 
 void graph_dev_end_frame(void)
 {
+	PROFILE_ZONE_START("graph_dev_end_frame");
+
 	/* printf("end frame\n"); */
 	draw_vertex_buffer_2d();
+
+	/* reset viewport to whole screen for final effects */
+	VIEWPORT(0, 0, sgc.screen_x, sgc.screen_y);
+
+#if 0
+	if (msaa.fbo != 0 && sgc.fbo_3d == msaa.fbo) {
+		glBindFramebuffer(GL_READ_FRAMEBUFFER, msaa.fbo);
+		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+		glBlitFramebuffer(0, 0, msaa.width, msaa.height, 0, 0,
+			sgc.screen_x, sgc.screen_y, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+
+		// glDisable(GL_MULTISAMPLE);
+
+	} else
+#endif
+	 if (post_target0.fbo != 0 && sgc.fbo_3d == post_target0.fbo) {
+		GLuint result_texture;
+
+		if (draw_smaa) {
+			/* do the multi stage smaa process:
+				render to texture -> edge_fbo -> blend_fbo -> screen back buffer */
+			resize_fbo_if_needed(&smaa_effect.edge_target);
+			resize_fbo_if_needed(&smaa_effect.blend_target);
+			resize_fbo_if_needed(&post_target1);
+
+			/* edge detect pass - render into edge_fbo */
+			glBindFramebuffer(GL_FRAMEBUFFER, smaa_effect.edge_target.fbo);
+			glClear(GL_COLOR_BUFFER_BIT);
+			graph_dev_raster_full_screen_effect(&smaa_effect.edge_shader, post_target0.color0_texture,
+				0, 0, 0, 1);
+
+			/* blend pass - render into blend_fbo */
+			glBindFramebuffer(GL_FRAMEBUFFER, smaa_effect.blend_target.fbo);
+			glClear(GL_COLOR_BUFFER_BIT);
+			graph_dev_raster_full_screen_effect(&smaa_effect.blend_shader,
+				smaa_effect.edge_target.color0_texture,
+				smaa_effect.area_tex, smaa_effect.search_tex, 0, 1);
+
+			/* eighborhood pass - render to back buffer */
+			glBindFramebuffer(GL_FRAMEBUFFER, post_target1.fbo);
+			glClear(GL_COLOR_BUFFER_BIT);
+			graph_dev_raster_full_screen_effect(&smaa_effect.neighborhood_shader,
+				post_target0.color0_texture, smaa_effect.blend_target.color0_texture, 0, 0, 1);
+
+			if (draw_smaa_edge)
+				result_texture = smaa_effect.edge_target.color0_texture;
+			else if (draw_smaa_blend)
+				result_texture = smaa_effect.blend_target.color0_texture;
+			else
+				result_texture = post_target1.color0_texture;
+		} else {
+			result_texture = post_target0.color0_texture;
+		}
+
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		graph_dev_raster_full_screen_effect(&fs_copy_shader, result_texture, 0, 0, 0, 1);
+	}
+
+	if (render_target_2d.fbo != 0 && sgc.fbo_2d == render_target_2d.fbo) {
+		/* alpha blend copy 2d fbo onto back buffer */
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+		glEnable(GL_BLEND);
+		BLEND_FUNC(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+		graph_dev_raster_full_screen_effect(&fs_copy_shader, render_target_2d.color0_texture, 0, 0, 0, 1);
+		glDisable(GL_BLEND);
+	}
+
+	PROFILE_ZONE_END();
 }
 
 void graph_dev_clear_depth_bit(void)
 {
+	PROFILE_ZONE_START("graph_dev_clear_depth_bit");
 	glClear(GL_DEPTH_BUFFER_BIT);
+	PROFILE_ZONE_END();
 }
 
 void graph_dev_draw_line(float x1, float y1, float x2, float y2)
 {
+	PROFILE_ZONE_START("graph_dev_draw_line");
 	make_room_in_vertex_buffer_2d(2);
 
 	add_vertex_2d(x1, y1, sgc.hue, 255, GL_LINES);
 	add_vertex_2d(x2, y2, sgc.hue, 255, GL_LINES);
+	PROFILE_ZONE_END();
 }
 
 void graph_dev_draw_rectangle(int filled, float x, float y, float width, float height)
 {
+	PROFILE_ZONE_START("graph_dev_draw_rectangle");
+
 	int x2, y2;
 	GLubyte alpha = 255;
 
@@ -2996,17 +3361,21 @@ void graph_dev_draw_rectangle(int filled, float x, float y, float width, float h
 
 		glDisable(GL_BLEND);
 	}
+	PROFILE_ZONE_END();
 }
 
 void graph_dev_draw_point(float x, float y)
 {
+	PROFILE_ZONE_START("graph_dev_draw_point");
 	make_room_in_vertex_buffer_2d(1);
 
 	add_vertex_2d(x, y, sgc.hue, 255, GL_POINTS);
+	PROFILE_ZONE_END();
 }
 
 void graph_dev_draw_arc(int filled, float x, float y, float width, float height, float angle1, float angle2)
 {
+	PROFILE_ZONE_START("graph_dev_draw_arc");
 	float max_angle_delta = 2.0 * M_PI / 180.0; /*some ratio to height and width? */
 	float rx = width/2.0;
 	float ry = height/2.0;
@@ -3059,6 +3428,8 @@ void graph_dev_draw_arc(int filled, float x, float y, float width, float height,
 
 		glDisable(GL_BLEND);
 	}
+
+	PROFILE_ZONE_END();
 }
 
 static void setup_single_color_lit_shader(struct graph_dev_gl_single_color_lit_shader *shader)
@@ -3075,6 +3446,11 @@ static void setup_single_color_lit_shader(struct graph_dev_gl_single_color_lit_s
 				"single-color-lit-per-vertex.vert",
 				"single-color-lit-per-vertex.frag",
 				UNIVERSAL_SHADER_HEADER FILMIC_TONEMAPPING);
+
+	/* create the VAO for this shader */
+	if (GLES_HAS_VAO) {
+		glGenVertexArraysOES(1, &shader->vao_id);
+	}
 
 	/* Get a handle for our "MVP" uniform */
 	shader->mvp_matrix_id = glGetUniformLocation(shader->program_id, "u_MVPMatrix");
@@ -3102,6 +3478,11 @@ static void setup_atmosphere_shader(struct graph_dev_gl_atmosphere_shader *shade
 				with_ring_shadow ?
 				UNIVERSAL_SHADER_HEADER FILMIC_TONEMAPPING "\n#define USE_ANNULUS_SHADOW 1\n" :
 				UNIVERSAL_SHADER_HEADER FILMIC_TONEMAPPING);
+
+	/* create the VAO for this shader */
+	if (GLES_HAS_VAO) {
+		glGenVertexArraysOES(1, &shader->vao_id);
+	}
 
 	/* Get a handle for our "MVP" uniform */
 	shader->mvp_matrix_id = glGetUniformLocation(shader->program_id, "u_MVPMatrix");
@@ -3147,7 +3528,13 @@ static void setup_textured_shader(const char *basename, const char *defines,
 
 	shader->program_id = load_concat_shaders(shader_directory,
 				vert_header, 1, filenames, frag_header, 1, filenames);
-	glUseProgram(shader->program_id);
+
+	/* create the VAO for this shader */
+	if (GLES_HAS_VAO) {
+		glGenVertexArraysOES(1, &shader->vao_id);
+	}
+
+	activate_shader(shader);
 
 	shader->mvp_matrix_id = glGetUniformLocation(shader->program_id, "u_MVPMatrix");
 	shader->mv_matrix_id = glGetUniformLocation(shader->program_id, "u_MVMatrix");
@@ -3229,7 +3616,10 @@ static void setup_textured_cubemap_shader(const char *basename, int use_normal_m
 
 	shader->program_id = load_concat_shaders(shader_directory,
 				vert_header, 1, filenames, frag_header, 1, filenames);
-	glUseProgram(shader->program_id);
+	if (GLES_HAS_VAO) {
+		glGenVertexArraysOES(1, &shader->vao_id);
+	}
+	activate_shader(shader);
 
 	/* Get a handle for our "MVP" uniform */
 	shader->mvp_matrix_id = glGetUniformLocation(shader->program_id, "u_MVPMatrix");
@@ -3289,6 +3679,10 @@ static void setup_filled_wireframe_shader(struct graph_dev_gl_filled_wireframe_s
 	shader->program_id = load_shaders(shader_directory,
 					"wireframe_filled.vert", "wireframe_filled.frag",
 					UNIVERSAL_SHADER_HEADER);
+	/* create the VAO for this shader */
+	if (GLES_HAS_VAO) {
+		glGenVertexArraysOES(1, &shader->vao_id);
+	}
 
 	shader->viewport_id = glGetUniformLocation(shader->program_id, "Viewport");
 	shader->mvp_matrix_id = glGetUniformLocation(shader->program_id, "ModelViewProjectionMatrix");
@@ -3314,6 +3708,10 @@ static void setup_trans_wireframe_shader(const char *basename, struct graph_dev_
 	/* Create and compile our GLSL program from the shaders */
 	shader->program_id = load_shaders(shader_directory, vert_filename, frag_filename,
 						UNIVERSAL_SHADER_HEADER);
+	/* create the VAO for this shader */
+	if (GLES_HAS_VAO) {
+		glGenVertexArraysOES(1, &shader->vao_id);
+	}
 
 	shader->mvp_matrix_id = glGetUniformLocation(shader->program_id, "u_MVPMatrix");
 	shader->mv_matrix_id = glGetUniformLocation(shader->program_id, "u_MVMatrix");
@@ -3332,6 +3730,10 @@ static void setup_single_color_shader(struct graph_dev_gl_single_color_shader *s
 	shader->program_id = load_shaders(shader_directory,
 				"single_color.vert", "single_color.frag",
 				UNIVERSAL_SHADER_HEADER);
+	/* create the VAO for this shader */
+	if (GLES_HAS_VAO) {
+		glGenVertexArraysOES(1, &shader->vao_id);
+	}
 
 	/* Get a handle for our "MVP" uniform */
 	shader->mvp_matrix_id = glGetUniformLocation(shader->program_id, "u_MVPMatrix");
@@ -3347,6 +3749,10 @@ static void setup_vertex_color_shader(struct graph_dev_gl_vertex_color_shader *s
 	shader->program_id = load_shaders(shader_directory,
 				"per_vertex_color.vert", "per_vertex_color.frag",
 				UNIVERSAL_SHADER_HEADER);
+	/* create the VAO for this shader */
+	if (GLES_HAS_VAO) {
+		glGenVertexArraysOES(1, &shader->vao_id);
+	}
 
 	shader->mvp_matrix_id = glGetUniformLocation(shader->program_id, "u_MVPMatrix");
 
@@ -3361,6 +3767,10 @@ static void setup_line_single_color_shader(struct graph_dev_gl_line_single_color
 	shader->program_id = load_shaders(shader_directory,
 				"line-single-color.vert", "line-single-color.frag",
 				UNIVERSAL_SHADER_HEADER);
+	/* create the VAO for this shader */
+	if (GLES_HAS_VAO) {
+		glGenVertexArraysOES(1, &shader->vao_id);
+	}
 
 	shader->mvp_matrix_id = glGetUniformLocation(shader->program_id, "u_MVPMatrix");
 	shader->viewport_id = glGetUniformLocation(shader->program_id, "u_Viewport");
@@ -3385,6 +3795,10 @@ static void setup_point_cloud_shader(const char *basename, struct graph_dev_gl_p
 	/* Create and compile our GLSL program from the shaders */
 	shader->program_id = load_shaders(shader_directory, vert_filename, frag_filename,
 				UNIVERSAL_SHADER_HEADER);
+	/* create the VAO for this shader */
+	if (GLES_HAS_VAO) {
+		glGenVertexArraysOES(1, &shader->vao_id);
+	}
 
 	/* Get a handle for our "MVP" uniform */
 	shader->mvp_matrix_id = glGetUniformLocation(shader->program_id, "u_MVPMatrix");
@@ -3402,6 +3816,10 @@ static void setup_color_by_w_shader(struct graph_dev_gl_color_by_w_shader *shade
 	/* Create and compile our GLSL program from the shaders */
 	shader->program_id = load_shaders(shader_directory, "color_by_w.vert", "color_by_w.frag",
 					UNIVERSAL_SHADER_HEADER);
+	/* create the VAO for this shader */
+	if (GLES_HAS_VAO) {
+		glGenVertexArraysOES(1, &shader->vao_id);
+	}
 
 	/* Get a handle for our "MVP" uniform */
 	shader->mvp_id = glGetUniformLocation(shader->program_id, "u_MVPMatrix");
@@ -3423,7 +3841,12 @@ static void setup_skybox_shader(struct graph_dev_gl_skybox_shader *shader)
 	/* Create and compile our GLSL program from the shaders */
 	shader->program_id = load_shaders(shader_directory, "skybox.vert", "skybox.frag",
 						UNIVERSAL_SHADER_HEADER FILMIC_TONEMAPPING);
-	glUseProgram(shader->program_id);
+	/* create the VAO for this shader */
+	if (GLES_HAS_VAO) {
+		glGenVertexArraysOES(1, &shader->vao_id);
+	}
+
+	activate_shader(shader);
 
 	/* Get a handle for our "MVP" uniform */
 	shader->mvp_id = glGetUniformLocation(shader->program_id, "MVP");
@@ -3527,7 +3950,12 @@ static void setup_textured_particle_shader(struct graph_dev_gl_textured_particle
 	shader->program_id = load_shaders(shader_directory,
 				"textured-particle.vert", "textured-particle.frag",
 				UNIVERSAL_SHADER_HEADER FILMIC_TONEMAPPING);
-	glUseProgram(shader->program_id);
+	/* create the VAO for this shader */
+	if (GLES_HAS_VAO) {
+		glGenVertexArraysOES(1, &shader->vao_id);
+	}
+
+	activate_shader(shader);
 
 	shader->mvp_matrix_id = glGetUniformLocation(shader->program_id, "u_MVPMatrix");
 	shader->camera_up_vec_id = glGetUniformLocation(shader->program_id, "u_CameraUpVec");
@@ -3552,10 +3980,10 @@ static void setup_fs_effect_shader(const char *basename,
 	struct graph_dev_gl_fs_effect_shader *shader)
 {
 	const char *vert_header =
-		UNIVERSAL_SHADER_HEADER
+		UNIVERSAL_SHADER_HEADER\
 		"#define INCLUDE_VS 1\n";
 	const char *frag_header =
-		UNIVERSAL_SHADER_HEADER
+		UNIVERSAL_SHADER_HEADER\
 		"#define INCLUDE_FS 1\n";
 
 	/* Create and compile our GLSL program from the shaders */
@@ -3567,7 +3995,12 @@ static void setup_fs_effect_shader(const char *basename,
 	maybe_unload_shader(&shader->meta, &shader->program_id);
 	shader->program_id = load_concat_shaders(shader_directory, vert_header, 1, filenames,
 		frag_header, 1, filenames);
-	glUseProgram(shader->program_id);
+	/* create the VAO for this shader */
+	if (GLES_HAS_VAO) {
+		glGenVertexArraysOES(1, &shader->vao_id);
+	}
+
+	activate_shader(shader);
 
 	shader->mvp_matrix_id = glGetUniformLocation(shader->program_id, "u_MVPMatrix");
 	shader->vertex_position_id = glGetAttribLocation(shader->program_id, "a_Position");
@@ -3606,6 +4039,10 @@ static void setup_smaa_effect_shader(const char *basename, struct graph_dev_gl_f
 	maybe_unload_shader(&shader->meta, &shader->program_id);
 	shader->program_id = load_concat_shaders(shader_directory,
 				vert_header, 3, filenames, frag_header, 3, filenames);
+	/* create the VAO for this shader */
+	if (GLES_HAS_VAO) {
+		glGenVertexArraysOES(1, &shader->vao_id);
+	}
 
 	shader->mvp_matrix_id = glGetUniformLocation(shader->program_id, "u_MVPMatrix");
 	shader->vertex_position_id = glGetAttribLocation(shader->program_id, "a_Position");
@@ -3617,13 +4054,111 @@ static void setup_smaa_effect_shader(const char *basename, struct graph_dev_gl_f
 	shader->texture2_id = -1;
 }
 
+static void setup_smaa_effect(struct graph_dev_smaa_effect *effect)
+{
+	struct graph_dev_gl_fs_effect_shader *shader;
+
+	shader = &effect->edge_shader;
+	setup_smaa_effect_shader("smaa-edge", shader);
+
+	activate_shader(shader);
+	shader->texture0_id = glGetUniformLocation(shader->program_id, "u_AlbedoTex");
+	glUniform1i(shader->texture0_id, 0);
+
+	shader = &effect->blend_shader;
+	setup_smaa_effect_shader("smaa-blend", shader);
+
+	activate_shader(shader);
+	shader->texture0_id = glGetUniformLocation(shader->program_id, "u_EdgeTex");
+	glUniform1i(shader->texture0_id, 0);
+	shader->texture1_id = glGetUniformLocation(shader->program_id, "u_AreaTex");
+	glUniform1i(shader->texture1_id, 1);
+	shader->texture2_id = glGetUniformLocation(shader->program_id, "u_SearchTex");
+	glUniform1i(shader->texture2_id, 2);
+
+	shader = &effect->neighborhood_shader;
+	setup_smaa_effect_shader("smaa-neighborhood", shader);
+
+	activate_shader(shader);
+	shader->texture0_id = glGetUniformLocation(shader->program_id, "u_AlbedoTex");
+	glUniform1i(shader->texture0_id, 0);
+	shader->texture1_id = glGetUniformLocation(shader->program_id, "u_BlendTex");
+	glUniform1i(shader->texture1_id, 1);
+
+	graph_dev_gen_texture(1, &effect->edge_target.color0_texture);
+	glBindTexture(GL_TEXTURE_2D, effect->edge_target.color0_texture);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+
+	graph_dev_gen_texture(1, &effect->blend_target.color0_texture);
+	glBindTexture(GL_TEXTURE_2D, effect->blend_target.color0_texture);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+	/* include file defines sizes and areaTexBytes of the area texture */
+#include "share/snis/textures/AreaTex.h"
+
+	graph_dev_gen_texture(1, &effect->area_tex);
+	glBindTexture(GL_TEXTURE_2D, effect->area_tex);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE_ALPHA, (GLsizei)AREATEX_WIDTH, (GLsizei)AREATEX_HEIGHT, 0,
+		GL_LUMINANCE_ALPHA, GL_UNSIGNED_BYTE, areaTexBytes);
+
+	/* include file defines sizes and searchTexBytes of the search texture */
+#include "share/snis/textures/SearchTex.h"
+
+	graph_dev_gen_texture(1, &effect->search_tex);
+	glBindTexture(GL_TEXTURE_2D, effect->search_tex);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, (GLsizei)SEARCHTEX_WIDTH, (GLsizei)SEARCHTEX_HEIGHT, 0,
+		GL_LUMINANCE, GL_UNSIGNED_BYTE, searchTexBytes);
+
+	glGenFramebuffers(1, &effect->edge_target.fbo);
+	glBindFramebuffer(GL_FRAMEBUFFER, effect->edge_target.fbo);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
+		effect->edge_target.color0_texture, 0);
+
+	glGenFramebuffers(1, &effect->blend_target.fbo);
+	glBindFramebuffer(GL_FRAMEBUFFER, effect->blend_target.fbo);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
+		effect->blend_target.color0_texture, 0);
+}
+
 static void setup_2d(void)
 {
+	memset(&render_target_2d, 0, sizeof(render_target_2d));
+
 	glGenBuffers(1, &sgc.vertex_buffer_2d);
 	glBindBuffer(GL_ARRAY_BUFFER, sgc.vertex_buffer_2d);
 	glBufferData(GL_ARRAY_BUFFER, VERTEX_BUFFER_2D_SIZE, 0, GL_STREAM_DRAW);
 
 	sgc.nvertex_2d = 0;
+
+	/* render 2d to seperate fbo if supported */
+	if (fbo_render_to_texture_supported()) {
+		graph_dev_gen_texture(1, &render_target_2d.color0_texture);
+		glBindTexture(GL_TEXTURE_2D, render_target_2d.color0_texture);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+		glGenFramebuffers(1, &render_target_2d.fbo);
+		glBindFramebuffer(GL_FRAMEBUFFER, render_target_2d.fbo);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
+			render_target_2d.color0_texture, 0);
+	}
 }
 
 static void setup_3d(void)
@@ -3650,6 +4185,8 @@ static void setup_3d(void)
 
 void graph_dev_reload_all_shaders(void)
 {
+	PROFILE_ZONE_START("graph_dev_reload_all_shaders");
+
 	setup_single_color_lit_shader(&single_color_lit_shader);
 	setup_atmosphere_shader(&atmosphere_shader, 0);
 	setup_atmosphere_shader(&atmosphere_with_annulus_shadow_shader, 1);
@@ -3698,20 +4235,30 @@ void graph_dev_reload_all_shaders(void)
 				&textured_alpha_by_normal_shader);
 	setup_textured_shader("planetary-lightning", UNIVERSAL_SHADER_HEADER, &planetary_lightning_shader);
 	setup_textured_shader("warp-gate-effect", UNIVERSAL_SHADER_HEADER FILMIC_TONEMAPPING, &warp_gate_effect_shader);
+
+	if (fbo_render_to_texture_supported())
+		setup_smaa_effect(&smaa_effect);
+
+	PROFILE_ZONE_END();
 }
 
 static void enqueue_image_load_request(struct graph_dev_image_load_request *r)
 {
+	PROFILE_ZONE_START("enqueue_image_load_request");
 	work_queue_enqueue(image_loader_wq, r);
+	PROFILE_ZONE_END();
 }
 
 static void enqueue_image_load_completion(struct graph_dev_image_load_request *r)
 {
+	PROFILE_ZONE_START("enqueue_image_load_completion");
 	work_queue_enqueue(loaded_images_wq, r);
+	PROFILE_ZONE_END();
 }
 
 static void process_image_load_request_normal(struct graph_dev_image_load_request *r)
 {
+	PROFILE_ZONE_START("process_image_load_request_normal");
 	r->image_data[0] = png_utils_read_png_image(r->filename[0],
 				r->flipVertical, r->flipHorizontal, r->pre_multiply_alpha,
 				&r->w[0], &r->h[0], &r->hasAlpha[0], r->whynot, sizeof(r->whynot));
@@ -3719,14 +4266,17 @@ static void process_image_load_request_normal(struct graph_dev_image_load_reques
 		fprintf(stderr, "Failed to decode image file '%s: %s\n",
 			r->filename[0], r->whynot);
 		graph_dev_free_image_load_request(r);
+		PROFILE_ZONE_END();
 		return;
 	}
 	/* Put the data on the queue for the main thread to upload to the GPU */
 	enqueue_image_load_completion(r);
+	PROFILE_ZONE_END();
 }
 
 static void process_image_load_request_cubemap(struct graph_dev_image_load_request *r)
 {
+	PROFILE_ZONE_START("process_image_load_request_cubemap");
 	for (int i = 0; i < 6; i++) {
 		r->image_data[i] = png_utils_read_png_image(r->filename[i], 0, r->is_inside, 1,
 			&r->w[i], &r->h[i], &r->hasAlpha[i], r->whynot, sizeof(r->whynot));
@@ -3734,16 +4284,19 @@ static void process_image_load_request_cubemap(struct graph_dev_image_load_reque
 			fprintf(stderr, "Failed to decode image file '%s: %s\n",
 				r->filename[i], r->whynot);
 			graph_dev_free_image_load_request(r);
+			PROFILE_ZONE_END();
 			return;
 		}
 	}
 	/* Put the data on the queue for the main thread to upload to the GPU */
 	enqueue_image_load_completion(r);
+	PROFILE_ZONE_END();
 }
 
 /* Process a request to load an image */
 static void process_image_load_request(void *work)
 {
+	PROFILE_ZONE_START("process_image_load_request");
 	struct graph_dev_image_load_request *r = work;
 	switch (r->request_type) {
 	case GRAPH_DEV_IMAGE_LOAD:
@@ -3757,6 +4310,7 @@ static void process_image_load_request(void *work)
 		graph_dev_free_image_load_request(r);
 		break;
 	}
+	PROFILE_ZONE_END();
 }
 
 /* Set up work queues for loading texture data concurrently with main loop */
@@ -3775,21 +4329,96 @@ int graph_dev_setup(const char *shader_dir)
 	}
 	printf("Initialized GLAD\n");
 
+	const char *version = (const char *)glGetString(GL_VERSION);
+	const char *vendor = (const char *)glGetString(GL_VENDOR);
+	const char *renderer = (const char *)glGetString(GL_RENDERER);
+	const char *glslversion = (const char *)glGetString(GL_SHADING_LANGUAGE_VERSION);
+	fprintf(stderr, "OpenGL ES: Version:  %s\n", version);
+	fprintf(stderr, "          Vendor:   %s\n", vendor);
+	fprintf(stderr, "          Renderer: %s\n", renderer);
+	fprintf(stderr, "          Shader Language Version: %s\n", glslversion);
+
 	if (GLAD_GL_EXT_sRGB) {
 		fprintf(stderr, "WARNING: No hardware support for SRGB colorspace - will force linear.\n");
 	}
 
-	if (shader_dir) {
-		if (shader_directory && shader_directory != default_shader_directory)
-			free(shader_directory);
-		shader_directory = strdup(shader_dir);
+	int want8bit = 0;
+	int bitWidth = 0;
+	static const SDL_GLattr attrs[] = { SDL_GL_RED_SIZE, SDL_GL_GREEN_SIZE, SDL_GL_BLUE_SIZE };
+	for (unsigned idx = 0; idx < ARRAY_ELEMENTS(attrs); idx++) {
+		SDL_GL_GetAttribute(attrs[idx], &bitWidth);
+		if (bitWidth > 4) {
+			want8bit = 1;
+			break;
+		}
+	}
+
+	if (GLAD_GL_OES_rgb8_rgba8) {
+		if (want8bit) {
+			fbo_format = GL_RGBA8_OES;
+		}
 	} else {
-		shader_directory = (char *) default_shader_directory;
+		fbo_format = GL_RGBA4;
+		if (want8bit) {
+			fprintf(stderr, "WARNING: our real buffers are > RGBA4, but we don't have GL_OES_rgb8_rgba8 - FBOs will be RGBA4\n");
+		}
+	}
+
+	if (shader_dir) {
+		strncpy(shader_directory, shader_dir, PATH_MAX);
+		strncat(shader_directory, "/shader-es", PATH_MAX);
+	} else {
+		strncpy(shader_directory, default_shader_directory, PATH_MAX);
 	}
 
 	fprintf(stderr, "shader dir = %s\n", shader_directory);
 
 	glDepthFunc(GL_LESS);
+
+	memset(&msaa, 0, sizeof(msaa));
+	memset(&post_target0, 0, sizeof(post_target0));
+	memset(&post_target1, 0, sizeof(post_target1));
+	memset(&smaa_effect, 0, sizeof(smaa_effect));
+
+	if (msaa_render_to_fbo_supported()) {
+		glGenFramebuffers(1, &msaa.fbo);
+		glGenRenderbuffers(1, &msaa.color0_buffer);
+		glGenRenderbuffers(1, &msaa.depth_buffer);
+		msaa.width = 0;
+		msaa.height = 0;
+		msaa.samples = 0;
+	}
+
+	if (fbo_render_to_texture_supported()) {
+		graph_dev_gen_texture(1, &post_target0.color0_texture);
+		glBindTexture(GL_TEXTURE_2D, post_target0.color0_texture);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+		glGenRenderbuffers(1, &post_target0.depth_buffer);
+		glBindRenderbuffer(GL_RENDERBUFFER, post_target0.depth_buffer);
+
+		glGenFramebuffers(1, &post_target0.fbo);
+		glBindFramebuffer(GL_FRAMEBUFFER, post_target0.fbo);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
+			post_target0.color0_texture, 0);
+		glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER,
+			post_target0.depth_buffer);
+
+		graph_dev_gen_texture(1, &post_target1.color0_texture);
+		glBindTexture(GL_TEXTURE_2D, post_target1.color0_texture);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+		glGenFramebuffers(1, &post_target1.fbo);
+		glBindFramebuffer(GL_FRAMEBUFFER, post_target1.fbo);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
+			post_target1.color0_texture, 0);
+	}
 
 	graph_dev_reload_all_shaders();
 
@@ -3808,6 +4437,7 @@ int graph_dev_setup(const char *shader_dir)
 /* returns zero on success, -1 otherwise */
 static int cubemap_texture_to_gpu(struct graph_dev_image_load_request *r)
 {
+	PROFILE_ZONE_START("cubemap_texture_to_gpu");
 	static const GLint tex_pos[] = {
 		GL_TEXTURE_CUBE_MAP_POSITIVE_X, GL_TEXTURE_CUBE_MAP_NEGATIVE_X,
 		GL_TEXTURE_CUBE_MAP_POSITIVE_Y, GL_TEXTURE_CUBE_MAP_NEGATIVE_Y,
@@ -3858,12 +4488,14 @@ static int cubemap_texture_to_gpu(struct graph_dev_image_load_request *r)
 
 	pthread_mutex_unlock(&finished_loading_mutex);
 	graph_dev_free_image_load_request(r);
+	PROFILE_ZONE_END();
 	return 0;
 }
 
 void graph_dev_expire_all_textures(void)
 {
 	int i;
+	PROFILE_ZONE_START("graph_dev_expire_all_textures");
 
 	pthread_mutex_lock(&finished_loading_mutex);
 	for (i = 0; i < nloaded_textures; i++)
@@ -3871,20 +4503,23 @@ void graph_dev_expire_all_textures(void)
 	for (i = 0; i < nloaded_cubemap_textures; i++)
 		loaded_cubemap_textures[i].expired = 1;
 	pthread_mutex_unlock(&finished_loading_mutex);
+
+	PROFILE_ZONE_END();
 }
 
 void graph_dev_expire_texture(char *filename)
 {
 	int i;
+	PROFILE_ZONE_START("graph_dev_expire_texture");
 
 	pthread_mutex_lock(&finished_loading_mutex);
 	for (i = 0; i < nloaded_textures; i++)
 		if (strcmp(loaded_textures[i].filename, filename) == 0) {
 			loaded_textures[i].expired = 1;
-			pthread_mutex_unlock(&finished_loading_mutex);
-			return;
+			break;
 		}
 	pthread_mutex_unlock(&finished_loading_mutex);
+	PROFILE_ZONE_END();
 }
 
 void graph_dev_expire_cubemap_texture(int is_inside,
@@ -3896,6 +4531,7 @@ void graph_dev_expire_cubemap_texture(int is_inside,
 					const char *texture_filename_neg_z)
 {
 	int i, j;
+	PROFILE_ZONE_START("graph_dev_expire_cubemap_texture");
 
 	const char *tex_filenames[] = {
 		texture_filename_pos_x, texture_filename_neg_x,
@@ -3913,10 +4549,12 @@ void graph_dev_expire_cubemap_texture(int is_inside,
 			}
 			if (match) {
 				loaded_cubemap_textures[i].expired = 1;
+				PROFILE_ZONE_END();
 				return;
 			}
 		}
 	}
+	PROFILE_ZONE_END();
 }
 
 unsigned int graph_dev_load_cubemap_texture(
@@ -4297,7 +4935,7 @@ void graph_dev_draw_skybox(const struct mat44 *mat_vp)
 	glDisable(GL_DEPTH_TEST);
 	glDisable(GL_CULL_FACE);
 
-	glUseProgram(skybox_shader.program_id);
+	activate_shader(&skybox_shader);
 
 	BIND_TEXTURE(GL_TEXTURE0, GL_TEXTURE_CUBE_MAP, skybox_shader.cube_texture_id);
 
@@ -4320,8 +4958,9 @@ void graph_dev_draw_skybox(const struct mat44 *mat_vp)
 
 	glDrawArrays(GL_TRIANGLES, 0, cubemap_cube.nvertices);
 
-	glDisableVertexAttribArray(skybox_shader.vertex_id);
-	glUseProgram(0);
+	if (!GLES_HAS_VAO) {
+		glDisableVertexAttribArray(skybox_shader.vertex_id);
+	}
 	glDepthMask(GL_TRUE);
 	glEnable(GL_DEPTH_TEST);
 	glEnable(GL_CULL_FACE);
@@ -4357,6 +4996,19 @@ void graph_dev_display_debug_menu_show(void)
 #endif
 	sng_set_foreground(WHITE);
 	debug_menu_draw_item("BILLBOARD WIREFRAME", 1, 0, draw_billboard_wireframe);
+	// debug_menu_draw_item("POLYGON AS LINE", 2, 0, draw_polygon_as_lines);
+	debug_menu_draw_item("NO MSAA", 3, 0, draw_msaa_samples == 0);
+
+	int max_samples = msaa_max_samples();
+	debug_menu_draw_item("2x MSAA", 4, max_samples < 2 || !draw_render_to_texture,
+				draw_msaa_samples == 2 && draw_render_to_texture);
+	debug_menu_draw_item("4x MSAA", 5, max_samples < 4 || !draw_render_to_texture,
+				draw_msaa_samples == 4 && draw_render_to_texture);
+	debug_menu_draw_item("RENDER TO TEXTURE", 6, 0, draw_render_to_texture);
+	debug_menu_draw_item("SMAA", 7, !draw_render_to_texture,
+									draw_smaa);
+	debug_menu_draw_item("SMAA DEBUG EDGE", 8, !draw_smaa, draw_smaa_edge);
+	debug_menu_draw_item("SMAA DEBUG BLEND", 9, !draw_smaa, draw_smaa_blend);
 	debug_menu_draw_item("PLANETARY ATMOSPHERES", 10, 0, draw_atmospheres);
 	debug_menu_draw_item("PLANET SPECULARITY", 11, 0, graph_dev_planet_specularity);
 	debug_menu_draw_item("FILMIC TONEMAPPING", 12, 0, filmic_tonemapping);
@@ -4380,6 +5032,47 @@ int graph_dev_graph_dev_debug_menu_click(int x, int y)
 #endif
 	if (selected_debug_item_checkbox(1, x, y, &draw_billboard_wireframe))
 		return 1;
+	// if (selected_debug_item_checkbox(2, x, y, &draw_polygon_as_lines))
+	// 	return 1;
+	if (selected_debug_item_checkbox(3, x, y, NULL)) {
+		draw_msaa_samples = 0;
+		return 1;
+	}
+	if (selected_debug_item_checkbox(4, x, y, NULL)) {
+		if (msaa_max_samples() >= 2 && draw_render_to_texture)
+			draw_msaa_samples = 2;
+		return 1;
+	}
+	if (selected_debug_item_checkbox(5, x, y, NULL)) {
+		if (msaa_max_samples() >= 4 && draw_render_to_texture)
+			draw_msaa_samples = 4;
+		return 1;
+	}
+	if (selected_debug_item_checkbox(6, x, y, &draw_render_to_texture)) {
+		if (!draw_render_to_texture) {
+			/* If render to texture is disabled, disable everything that needs it */
+			draw_msaa_samples = 0;
+			draw_smaa = 0;
+			draw_smaa_edge = 0;
+			draw_smaa_blend = 0;
+		}
+		return 1;
+	}
+	if (selected_debug_item_checkbox(7, x, y, &draw_smaa))
+		if (draw_render_to_texture)
+			return 1;
+	if (selected_debug_item_checkbox(8, x, y, &draw_smaa_edge)) {
+		if (draw_render_to_texture) {
+			draw_smaa_blend = 0;
+			return 1;
+		}
+	}
+	if (selected_debug_item_checkbox(9, x, y, &draw_smaa_blend)) {
+		if (draw_render_to_texture) {
+			draw_smaa_edge = 0;
+			return 1;
+		}
+	}
 	if (selected_debug_item_checkbox(10, x, y, &draw_atmospheres))
 		return 1;
 	if (selected_debug_item_checkbox(11, x, y, &graph_dev_planet_specularity))
@@ -4528,3 +5221,27 @@ void graph_dev_clear_window(void)
 	glClear(GL_COLOR_BUFFER_BIT);
 }
 
+void graph_dev_prepare_for_window(uint32_t *window_flags)
+{
+	SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 4);
+	SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 4);
+	SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 4);
+	SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 16);
+
+	// for GLES, we claim ES 2.0
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+
+	*window_flags = *window_flags | SDL_WINDOW_OPENGL;
+}
+
+void graph_dev_create_context(SDL_Window *window)
+{
+	SDL_GLContext gl_context = SDL_GL_CreateContext(window);
+	if (NULL == gl_context) {
+		fprintf(stderr, "Couldn't create OpenGL ES Context: %s\n", SDL_GetError());
+		exit(1);
+	}
+	(void) gl_context;
+}
