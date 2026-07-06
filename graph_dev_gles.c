@@ -4103,7 +4103,7 @@ static void setup_smaa_effect(struct graph_dev_smaa_effect *effect)
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
 	/* include file defines sizes and areaTexBytes of the area texture */
-#include "share/snis/textures/AreaTex.h"
+#include "smaa/gles2/AreaTex.h"
 
 	graph_dev_gen_texture(1, &effect->area_tex);
 	glBindTexture(GL_TEXTURE_2D, effect->area_tex);
@@ -4115,7 +4115,7 @@ static void setup_smaa_effect(struct graph_dev_smaa_effect *effect)
 		GL_LUMINANCE_ALPHA, GL_UNSIGNED_BYTE, areaTexBytes);
 
 	/* include file defines sizes and searchTexBytes of the search texture */
-#include "share/snis/textures/SearchTex.h"
+#include "smaa/gles2/SearchTex.h"
 
 	graph_dev_gen_texture(1, &effect->search_tex);
 	glBindTexture(GL_TEXTURE_2D, effect->search_tex);

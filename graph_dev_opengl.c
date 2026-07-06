@@ -3952,11 +3952,11 @@ static void setup_smaa_effect_shader(const char *basename, struct graph_dev_gl_f
 	const char *vert_header;
 	const char *frag_header;
 	vert_header =
-		"#version 130\n"
+		"#version 150\n"
 		"#define INCLUDE_VS 1\n"
 		"#define SMAA_GLSL_3\n";
 	frag_header =
-		"#version 130\n"
+		"#version 150\n"
 		"#define INCLUDE_FS 1\n"
 		"#define SMAA_GLSL_3\n";
 
@@ -4026,7 +4026,7 @@ static void setup_smaa_effect(struct graph_dev_smaa_effect *effect)
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
 	/* include file defines sizes and areaTexBytes of the area texture */
-#include "share/snis/textures/AreaTex.h"
+#include "smaa/gl3/AreaTex.h"
 
 	graph_dev_gen_texture(1, &effect->area_tex);
 	glBindTexture(GL_TEXTURE_2D, effect->area_tex);
@@ -4038,7 +4038,7 @@ static void setup_smaa_effect(struct graph_dev_smaa_effect *effect)
 		GL_RG, GL_UNSIGNED_BYTE, areaTexBytes);
 
 	/* include file defines sizes and searchTexBytes of the search texture */
-#include "share/snis/textures/SearchTex.h"
+#include "smaa/gl3/SearchTex.h"
 
 	graph_dev_gen_texture(1, &effect->search_tex);
 	glBindTexture(GL_TEXTURE_2D, effect->search_tex);
@@ -4101,7 +4101,7 @@ static void setup_3d(void)
 
 	glGenBuffers(1, &sgc.gl_info_3d_line.line_vertex_buffer);
 	glBindBuffer(GL_ARRAY_BUFFER, sgc.gl_info_3d_line.line_vertex_buffer);
-	glBufferData(GL_ARRAY_BUFFER, 0, 0, GL_STATIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, 0, 0, GL_STREAM_DRAW);
 
 	sgc.texture_unit_active = 0;
 	memset(sgc.texture_unit_bind, 0, sizeof(sgc.texture_unit_bind));
