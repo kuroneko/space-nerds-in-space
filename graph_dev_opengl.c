@@ -735,6 +735,8 @@ activate_shader(const void *vptr)
 	}
 	glUseProgram(shader->program_id);
 	glBindVertexArray(shader->vao_id);
+
+	drawstate_active_program = shader->program_id;
 }
 
 struct graph_dev_gl_vertex_color_shader {
