@@ -8,6 +8,8 @@
 
 #include <tracy/TracyC.h>
 
+#define PROFILE_SET_THREAD_NAME(x)  TracyCSetThreadName(x)
+
 #define PROFILE_FRAME_START(x)  TracyCFrameMarkStart(x)
 #define PROFILE_FRAME_END(x)    TracyCFrameMarkEnd(x)
 
@@ -21,6 +23,8 @@
 
 
 #else
+
+#define PROFILE_SET_THREAD_NAME(x)
 
 #define PROFILE_FRAME_START(x)
 #define PROFILE_FRAME_END(x)

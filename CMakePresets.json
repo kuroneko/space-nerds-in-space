@@ -1,0 +1,86 @@
+{
+    "version": 8,
+    "configurePresets": [
+        {
+            "name": "debug-gles",
+            "displayName": "Debug Build targetting GLES",
+            "hidden": true,
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "SNIS_USE_GLES": true,
+                "SNIS_WITH_VOICE_CHAT": true
+            }
+        },
+        {
+            "name": "relwithdebinfo-gles",
+            "displayName": "RelWithDebInfo Build targetting GLES",
+            "hidden": true,
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+                "SNIS_USE_GLES": true,
+                "SNIS_WITH_VOICE_CHAT": true
+            }
+        },
+        {
+            "name": "profile-gles",
+            "displayName": "RelWithDebInfo Profiling Build targettin GLES",
+            "hidden": true,
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+                "SNIS_USE_GLES": true,
+                "SNIS_WITH_VOICE_CHAT": true,
+                "SNIS_PROFILE": true
+            }
+        },
+        {
+            "name": "debug-pi4",
+            "displayName": "Raspberry Pi 4 Debug Build",
+            "description": "Debug Build oriented for the Raspberry Pi 4/400 family",
+            "inherits": "debug-gles",
+            "hidden": false,
+            "generator": "Ninja",
+            "binaryDir": "out/build/${presetName}",
+            "installDir": "out/install/${presetName}"
+        },
+        {
+            "name": "relwithdebinfo-pi4",
+            "displayName": "Raspberry Pi 4 RelWithDebInfo Build",
+            "description": "RelWithDebInfo Build oriented for the Raspberry Pi 4/400 family",
+            "inherits": "relwithdebinfo-gles",
+            "hidden": false,
+            "generator": "Ninja",
+            "binaryDir": "out/build/${presetName}",
+            "installDir": "out/install/${presetName}"
+        },
+        {
+            "name": "profile-pi4",
+            "displayName": "Raspberry Pi 4 Profiling Build",
+            "description": "Profiling Build oriented for the Raspberry Pi 4/400 family",
+            "inherits": "profile-gles",
+            "hidden": false,
+            "generator": "Ninja",
+            "binaryDir": "out/build/${presetName}",
+            "installDir": "out/install/${presetName}"
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "debug-pi4",
+            "description": "Debug Build for Raspberry Pi 4/400",
+            "displayName": "Raspberry Pi 4 Debug Build",
+            "configurePreset": "debug-pi4"
+        },
+        {
+            "name": "relwithdebinfo-pi4",
+            "description": "RelWithDebInfo Build for Raspberry Pi 4/400",
+            "displayName": "Raspberry Pi 4 RelWithDebInfo Build",
+            "configurePreset": "relwithdebinfo-pi4"
+        },
+        {
+            "name": "profile-pi4",
+            "description": "Profile Build for Raspberry Pi 4/400",
+            "displayName": "Raspberry Pi 4 Profile Build",
+            "configurePreset": "profile-pi4"
+        }
+    ]
+}
