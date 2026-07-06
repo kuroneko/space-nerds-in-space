@@ -27,6 +27,7 @@
 #include "snis_typeface.h"
 #include "opengl_cap.h"
 #include "png_utils.h"
+#include "snis_profile.h"
 #include "workqueue.h"
 
 /* helper function for sizing*/
@@ -242,6 +243,7 @@ void mesh_graph_dev_cleanup(struct mesh *m)
 /* load/reload an array buffer using stream draw if it is being overwritten */
 #define LOAD_BUFFER(buffer_type, buffer_id, buffer_size, buffer_data) \
 	do { \
+		PROFILE_ZONE_START("LOAD_BUFFER"); \
 		GLenum usage; \
 		if ((buffer_id) == 0) { \
 			usage = GL_STATIC_DRAW; \
@@ -250,10 +252,13 @@ void mesh_graph_dev_cleanup(struct mesh *m)
 			usage = GL_STREAM_DRAW; \
 		glBindBuffer((buffer_type), (buffer_id)); \
 		glBufferData((buffer_type), (buffer_size), (buffer_data), usage); \
+		PROFILE_ZONE_END(); \
 	} while (0)
 
 void mesh_graph_dev_init(struct mesh *m)
 {
+	PROFILE_ZONE_START("mesh_graph_dev_init");
+
 	struct mesh_gl_info *ptr = m->graph_ptr;
 	if (!ptr) {
 		ptr = malloc(sizeof(struct mesh_gl_info));
@@ -690,6 +695,8 @@ void mesh_graph_dev_init(struct mesh *m)
 		free(g_v_buffer_data);
 		free(g_i_buffer_data);
 	}
+
+	PROFILE_ZONE_END();
 }
 
 struct graph_dev_gl_shader_metadata {
@@ -698,10 +705,12 @@ struct graph_dev_gl_shader_metadata {
 
 static void maybe_unload_shader(struct graph_dev_gl_shader_metadata *meta, GLuint *program_id)
 {
+	PROFILE_ZONE_START("maybe_unload_shader");
 	if (meta->program_id && *meta->program_id != (GLuint) -1) /* Shader is currently loaded? */
 		glDeleteProgram(*meta->program_id); /* Unload shader */
 	meta->program_id = program_id;
 	*meta->program_id = -1;
+	PROFILE_ZONE_END();
 }
 
 struct graph_dev_gl_vertex_color_shader {
@@ -1046,6 +1055,7 @@ static struct graph_dev_gl_context {
 
 #define BIND_TEXTURE(tex_unit, tex_type, tex_id) \
 	do { \
+		PROFILE_ZONE_START("BIND_TEXTURE"); \
 		int tex_offset = tex_unit - GL_TEXTURE0; \
 		if (sgc.texture_unit_active != tex_offset) { \
 			glActiveTexture(tex_unit); \
@@ -1055,19 +1065,23 @@ static struct graph_dev_gl_context {
 			glBindTexture(tex_type, tex_id); \
 			sgc.texture_unit_bind[tex_offset] = tex_id; \
 		} \
+		PROFILE_ZONE_END(); \
 	} while (0)
 
 #define BLEND_FUNC(src_blend, dest_blend) \
 	do { \
+		PROFILE_ZONE_START("BLEND_FUNC"); \
 		if (sgc.src_blend_func != src_blend || sgc.dest_blend_func != dest_blend) { \
 			glBlendFunc(src_blend, dest_blend); \
 			sgc.src_blend_func = src_blend; \
 			sgc.dest_blend_func = dest_blend; \
 		} \
+		PROFILE_ZONE_END(); \
 	} while (0)
 
 #define VIEWPORT(x, y, width, height) \
 	do { \
+		PROFILE_ZONE_START("VIEWPORT"); \
 		if (sgc.vp_x != x || sgc.vp_y != y || sgc.vp_width != width || sgc.vp_height != height) { \
 			glViewport(x, y, width, height); \
 			sgc.vp_x = x; \
@@ -1075,6 +1089,7 @@ static struct graph_dev_gl_context {
 			sgc.vp_width = width; \
 			sgc.vp_height = height; \
 		} \
+		PROFILE_ZONE_END(); \
 	} while (0)
 
 static void print_framebuffer_error(void)
@@ -1114,6 +1129,8 @@ static void print_framebuffer_error(void)
 
 static void resize_fbo_if_needed(struct fbo_target *target)
 {
+	PROFILE_ZONE_START("resize_fbo_if_needed");
+
 	if (target->width != sgc.screen_x || target->height != sgc.screen_y) {
 		/* need to resize the fbo attachments */
 		if (target->color0_texture > 0) {
@@ -1137,6 +1154,8 @@ static void resize_fbo_if_needed(struct fbo_target *target)
 		target->width = sgc.screen_x;
 		target->height = sgc.screen_y;
 	}
+
+	PROFILE_ZONE_END();
 }
 
 void graph_dev_set_screen_size(int width, int height)
@@ -1163,6 +1182,7 @@ void graph_dev_set_3d_viewport(int x_offset, int y_offset, int width, int height
 
 static void enable_2d_viewport(void)
 {
+	PROFILE_ZONE_START("enable_2d_viewport");
 	if (sgc.active_vp != 1) {
 		/* 2d viewport is entire screen */
 		VIEWPORT(0, 0, sgc.screen_x, sgc.screen_y);
@@ -1201,10 +1221,12 @@ static void enable_2d_viewport(void)
 
 		sgc.active_vp = 1;
 	}
+	PROFILE_ZONE_END();
 }
 
 static void enable_3d_viewport(void)
 {
+	PROFILE_ZONE_START("enable_3d_viewport");
 	if (sgc.active_vp != 2) {
 		VIEWPORT(sgc.vp_x_3d, sgc.vp_y_3d, sgc.vp_width_3d, sgc.vp_height_3d);
 
@@ -1222,6 +1244,7 @@ static void enable_3d_viewport(void)
 
 		sgc.active_vp = 2;
 	}
+	PROFILE_ZONE_END();
 }
 
 
@@ -1239,6 +1262,7 @@ void graph_dev_set_color(struct graph_dev_color *color, float a)
 
 static void draw_vertex_buffer_2d(void)
 {
+	PROFILE_ZONE_START("draw_vertex_buffer_2d");
 	if (sgc.nvertex_2d > 0) {
 		/* printf("start draw_vertex_buffer_2d %d\n", sgc.nvertex_2d); */
 		enable_2d_viewport();
@@ -1318,18 +1342,22 @@ static void draw_vertex_buffer_2d(void)
 		/* orphan this buffer so we don't get blocked on these draw commands */
 		glBufferData(GL_ARRAY_BUFFER, VERTEX_BUFFER_2D_SIZE, 0, GL_STREAM_DRAW);
 	}
+	PROFILE_ZONE_END();
 }
 
 static void make_room_in_vertex_buffer_2d(int nvertices)
 {
+	PROFILE_ZONE_START("make_room_in_vertex_buffer_2d");
 	if (sgc.nvertex_2d + nvertices > BUFFERED_VERTICES_2D) {
 		/* buffer needs to be emptied to fit next batch */
 		draw_vertex_buffer_2d();
 	}
+	PROFILE_ZONE_END();
 }
 
 static void add_vertex_2d(float x, float y, struct graph_dev_color *color, GLubyte alpha, GLenum mode)
 {
+	PROFILE_ZONE_START("add_vertex_2d");
 	struct vertex_color_buffer_data *vertex = &sgc.vertex_data_2d[sgc.nvertex_2d];
 
 	/* setup the vertex and color */
@@ -1344,6 +1372,7 @@ static void add_vertex_2d(float x, float y, struct graph_dev_color *color, GLuby
 	sgc.vertex_type_2d[sgc.nvertex_2d] = mode;
 
 	sgc.nvertex_2d += 1;
+	PROFILE_ZONE_END();
 }
 
 #if DEBUG_NORMALS
@@ -1437,6 +1466,7 @@ struct raster_texture_params {
 
 static void graph_dev_raster_texture(struct raster_texture_params *p)
 {
+	PROFILE_ZONE_START("graph_dev_raster_texture");
 	const struct graph_dev_gl_textured_shader *shader = p->shader;
 
 	enable_3d_viewport();
@@ -1633,16 +1663,21 @@ static void graph_dev_raster_texture(struct raster_texture_params *p)
 		graph_dev_draw_normal_lines(p->mat_mvp, p->m, ptr);
 	}
 #endif
+	PROFILE_ZONE_END();
 }
 
 static void graph_dev_raster_single_color_lit(const struct mat44 *mat_mvp, const struct mat44 *mat_mv,
 	const struct mat33 *mat_normal, struct mesh *m, struct sng_color *triangle_color, union vec3 *eye_light_pos,
 	float in_shade, float ambient)
 {
+	PROFILE_ZONE_START("graph_dev_raster_single_color_lit");
 	enable_3d_viewport();
 
 	if (!m->graph_ptr)
+	{
+		PROFILE_ZONE_END();
 		return;
+	}
 
 	struct mesh_gl_info *ptr = m->graph_ptr;
 
@@ -1700,6 +1735,8 @@ static void graph_dev_raster_single_color_lit(const struct mat44 *mat_mvp, const
 		graph_dev_draw_normal_lines(mat_mvp, m, ptr);
 	}
 #endif
+
+	PROFILE_ZONE_END();
 }
 
 static void graph_dev_raster_atmosphere(const struct mat44 *mat_mvp, const struct mat44 *mat_mv,
@@ -1707,14 +1744,22 @@ static void graph_dev_raster_atmosphere(const struct mat44 *mat_mvp, const struc
 	struct mesh *m, struct sng_color *triangle_color, union vec3 *eye_light_pos, GLfloat alpha,
 	struct shadow_annulus_data *shadow_annulus, float ring_texture_v, float atmosphere_brightness)
 {
+	PROFILE_ZONE_START("graph_dev_raster_atmosphere");
+
 	enable_3d_viewport();
 	struct graph_dev_gl_atmosphere_shader *shader;
 
 	if (!draw_atmospheres)
+	{
+		PROFILE_ZONE_END();
 		return;
+	}
 
 	if (!m->graph_ptr)
+	{
+		PROFILE_ZONE_END();
 		return;
+	}
 
 	struct mesh_gl_info *ptr = m->graph_ptr;
 
@@ -1807,15 +1852,22 @@ static void graph_dev_raster_atmosphere(const struct mat44 *mat_mvp, const struc
 		graph_dev_draw_normal_lines(mat_mvp, m, ptr);
 	}
 #endif
+
+	PROFILE_ZONE_END();
 }
 
 static void graph_dev_raster_filled_wireframe_mesh(const struct mat44 *mat_mvp, struct mesh *m,
 	struct sng_color *line_color, struct sng_color *triangle_color)
 {
+	PROFILE_ZONE_START("graph_dev_raster_filled_wireframe_mesh");
+
 	enable_3d_viewport();
 
 	if (!m->graph_ptr)
+	{
+		PROFILE_ZONE_END();
 		return;
+	}
 
 	struct mesh_gl_info *ptr = m->graph_ptr;
 
@@ -1898,6 +1950,8 @@ static void graph_dev_raster_filled_wireframe_mesh(const struct mat44 *mat_mvp, 
 		graph_dev_draw_normal_lines(mat_mvp, m, ptr);
 	}
 #endif
+
+	PROFILE_ZONE_END();
 }
 
 static void graph_dev_raster_trans_wireframe_mesh(struct graph_dev_gl_trans_wireframe_shader *shader,
@@ -2878,6 +2932,8 @@ static void graph_dev_raster_full_screen_effect(struct graph_dev_gl_fs_effect_sh
 {
 	static const struct mat44 mat_identity = { { { 1, 0, 0, 0}, { 0, 1, 0, 0 }, { 0, 0, 1, 0}, { 0, 0, 0, 1} } };
 
+	PROFILE_ZONE_START("graph_dev_raster_full_screen_effect");
+
 	glUseProgram(shader->program_id);
 	glBindVertexArray(shader->vao_id);
 
@@ -2929,15 +2985,20 @@ static void graph_dev_raster_full_screen_effect(struct graph_dev_gl_fs_effect_sh
 
 	glDrawArrays(GL_TRIANGLES, 0, textured_unit_quad.nvertices);
 
+	PROFILE_ZONE_END();
 }
 
 /* If any textures loads (PNG decoding) have completed, send them to the GPU */
 static void graph_dev_send_completed_textures_to_gpu(void)
 {
+	PROFILE_ZONE_START("graph_dev_send_completed_textures_to_gpu");
 	do {
 		struct graph_dev_image_load_request *r = work_queue_dequeue(loaded_images_wq);
 		if (!r)
+		{
+			PROFILE_ZONE_END();
 			return;
+		}
 
 		switch (r->request_type) {
 		case GRAPH_DEV_IMAGE_LOAD:
@@ -2950,10 +3011,14 @@ static void graph_dev_send_completed_textures_to_gpu(void)
 			break;
 		}
 	} while (1);
+	// unreachable?
+	PROFILE_ZONE_END();
 }
 
 void graph_dev_start_frame(void)
 {
+	PROFILE_ZONE_START("graph_dev_start_frame");
+
 	graph_dev_send_completed_textures_to_gpu();
 
 	/* reset viewport to whole screen */
@@ -3014,10 +3079,14 @@ void graph_dev_start_frame(void)
 	/* clear the bound 3d buffer */
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	sgc.fbo_current = sgc.fbo_3d;
+
+	PROFILE_ZONE_END();
 }
 
 void graph_dev_end_frame(void)
 {
+	PROFILE_ZONE_START("graph_dev_end_frame");
+
 	/* printf("end frame\n"); */
 	draw_vertex_buffer_2d();
 
@@ -3084,23 +3153,31 @@ void graph_dev_end_frame(void)
 		graph_dev_raster_full_screen_effect(&fs_copy_shader, render_target_2d.color0_texture, 0, 0, 0, 1);
 		glDisable(GL_BLEND);
 	}
+
+	PROFILE_ZONE_END();
 }
 
 void graph_dev_clear_depth_bit(void)
 {
+	PROFILE_ZONE_START("graph_dev_clear_depth_bit");
 	glClear(GL_DEPTH_BUFFER_BIT);
+	PROFILE_ZONE_END();
 }
 
 void graph_dev_draw_line(float x1, float y1, float x2, float y2)
 {
+	PROFILE_ZONE_START("graph_dev_draw_line");
 	make_room_in_vertex_buffer_2d(2);
 
 	add_vertex_2d(x1, y1, sgc.hue, 255, GL_LINES);
 	add_vertex_2d(x2, y2, sgc.hue, 255, GL_LINES);
+	PROFILE_ZONE_END();
 }
 
 void graph_dev_draw_rectangle(int filled, float x, float y, float width, float height)
 {
+	PROFILE_ZONE_START("graph_dev_draw_rectangle");
+
 	int x2, y2;
 	GLubyte alpha = 255;
 
@@ -3156,17 +3233,21 @@ void graph_dev_draw_rectangle(int filled, float x, float y, float width, float h
 
 		glDisable(GL_BLEND);
 	}
+	PROFILE_ZONE_END();
 }
 
 void graph_dev_draw_point(float x, float y)
 {
+	PROFILE_ZONE_START("graph_dev_draw_point");
 	make_room_in_vertex_buffer_2d(1);
 
 	add_vertex_2d(x, y, sgc.hue, 255, GL_POINTS);
+	PROFILE_ZONE_END();
 }
 
 void graph_dev_draw_arc(int filled, float x, float y, float width, float height, float angle1, float angle2)
 {
+	PROFILE_ZONE_START("graph_dev_draw_arc");
 	float max_angle_delta = 2.0 * M_PI / 180.0; /*some ratio to height and width? */
 	float rx = width/2.0;
 	float ry = height/2.0;
@@ -3219,6 +3300,8 @@ void graph_dev_draw_arc(int filled, float x, float y, float width, float height,
 
 		glDisable(GL_BLEND);
 	}
+
+	PROFILE_ZONE_END();
 }
 
 static void setup_single_color_lit_shader(struct graph_dev_gl_single_color_lit_shader *shader)
