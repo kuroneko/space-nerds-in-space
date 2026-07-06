@@ -10,10 +10,10 @@ uniform float u_Ambient;   // Ambient light, 0.1 is ok value
 
 uniform vec3 u_LightPos;   // The position of the light in eye space.
 
-in vec4 a_Position; // Per-vertex position information we will pass in.
-in vec3 a_Normal;   // Per-vertex normal information we will pass in.
+attribute vec4 a_Position; // Per-vertex position information we will pass in.
+attribute vec3 a_Normal;   // Per-vertex normal information we will pass in.
 
-out vec3 v_Color;      // This will be passed into the fragment shader.
+varying vec3 v_Color;      // This will be passed into the fragment shader.
 
 void main()                // The entry point for our vertex shader.
 {

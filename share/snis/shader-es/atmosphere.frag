@@ -3,11 +3,9 @@ uniform vec3 u_LightPos;       // The position of the light in eye space.
 uniform float u_Alpha;		// Relative alpha, 0.0 - 1.0.
 uniform float u_atmosphere_brightness; // 0.0 - 1.0, default 0.5  Brightness of atmosphere
 
-in vec3 v_Position;       // Interpolated position for this fragment.
-in vec3 v_Color;          // This is the color from the vertex shader interpolated across the triangle per fragment
-in vec3 v_Normal;         // Interpolated normal for this fragment.
-
-out vec4 f_FragColor;
+varying vec3 v_Position;       // Interpolated position for this fragment.
+varying vec3 v_Color;          // This is the color from the vertex shader interpolated across the triangle per fragment
+varying vec3 v_Normal;         // Interpolated normal for this fragment.
 
 float map(in float x, float min1, float max1, float min2, float max2)
 {
@@ -103,7 +101,7 @@ void main()
 	/* This transparency just doesn't seem to work like I want it to. */
 	/* fragcolor.a = min(fragcolor.a, smoothstep(0.7, 1.0, ring_shadow) * ring_shadow); */ /* atmosphere becomes more transparent in shadow */
 	fragcolor.rgb *= map(ring_shadow, 0.0, 1.0, 0.8, 1.0);
-	f_FragColor = fragcolor;
-	f_FragColor = filmic_tonemap(f_FragColor);
+	gl_FragColor = fragcolor;
+	gl_FragColor = filmic_tonemap(gl_FragColor);
 }
 
