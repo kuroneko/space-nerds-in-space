@@ -1,10 +1,8 @@
 
-in vec4 v_Color;      // Per-vertex color information we got passed.
-
-out vec4 f_FragColor;
+varying vec4 v_Color;      // Per-vertex color information we got passed.
 
 void main()
 {
-	f_FragColor = v_Color;
+	gl_FragColor = v_Color;
 }
 

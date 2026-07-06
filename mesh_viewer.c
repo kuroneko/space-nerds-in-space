@@ -209,7 +209,7 @@ static void quit(int code)
 
 static int helpmode;
 static SDL_Window *screen;
-static SDL_Renderer *renderer;
+// static SDL_Renderer *renderer;
 
 static void adjust_spinning(float speed_factor)
 {
@@ -1225,13 +1225,18 @@ int main(int argc, char *argv[])
 		quit(1);
 	}
 
+	Uint32 windowFlags = SDL_WINDOW_RESIZABLE;
+	graph_dev_prepare_for_window(&windowFlags);
+
 	screen = SDL_CreateWindow("Mesh Viewer", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
 			3 * SCREEN_WIDTH / 4, 3 * SCREEN_HEIGHT / 4, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
 	if (!screen) {
 		fprintf(stderr, "SDL_CreateWindow failed: %s\n", SDL_GetError());
 		quit(1);
 	}
-	renderer = SDL_CreateRenderer(screen, -1, 0);
+
+	graph_dev_create_context(screen);
+	// renderer = SDL_CreateRenderer(screen, -1, 0);
 
 	figure_aspect_ratio(screen, -1, -1, &real_screen_width, &real_screen_height);
 	SCREEN_WIDTH = real_screen_width;
@@ -1244,7 +1249,7 @@ int main(int argc, char *argv[])
 
 	snis_typefaces_init();
 	sng_set_font_family(0);
-	graph_dev_setup("share/snis/shader");
+	graph_dev_setup(NULL);
 	setup_skybox("orange-haze");
 
 	SDL_SetWindowSize(screen, real_screen_width, real_screen_height);

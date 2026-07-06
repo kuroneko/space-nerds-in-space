@@ -16,9 +16,7 @@
 #include "mikktspace/mikktspace.h"
 #include "open-simplex-noise.h"
 
-#define DEFINE_MESH_GLOBALS 1
 #include "mesh.h"
-#undef DEFINE_MESH_GLOBALS
 
 float mesh_compute_radius(struct mesh *m)
 {

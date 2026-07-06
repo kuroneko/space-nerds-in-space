@@ -52,18 +52,18 @@ int fbo_render_to_texture_supported()
 	}
 	if (suppress)
 		return 0;
-	// FBOs are required in ES 3.0
+	// FBOs are required in ES 2.0
 	return 1;
 }
 
 int framebuffer_srgb_supported()
 {
-	return 1;
+	return GLAD_GL_EXT_sRGB;
 }
 
 int texture_srgb_supported()
 {
-	return 1;
+	return GLAD_GL_EXT_sRGB;
 }
 
 

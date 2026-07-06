@@ -568,6 +568,7 @@ SamplerState PointSampler { Filter = MIN_MAG_MIP_POINT; AddressU = Clamp; Addres
 #define SMAASampleLevelZeroOffset(tex, coord, offset) texture2D(tex, coord + offset * SMAA_RT_METRICS.xy)
 #define SMAASampleOffset(tex, coord, offset) texture2D(tex, coord + offset * SMAA_RT_METRICS.xy)
 #define round(x) (floor((x) + 0.5))
+#define SMAAOffset(x,y) vec2(x,y)
 #endif
 #if defined(SMAA_GLSL_3) || defined(SMAA_GLSL_4)
 #define SMAASampleLevelZero(tex, coord) textureLod(tex, coord, 0.0)
@@ -576,6 +577,7 @@ SamplerState PointSampler { Filter = MIN_MAG_MIP_POINT; AddressU = Clamp; Addres
 #define SMAASample(tex, coord) texture(tex, coord)
 #define SMAASamplePoint(tex, coord) texture(tex, coord)
 #define SMAASampleOffset(tex, coord, offset) texture(tex, coord, offset)
+#define SMAAOffset(x,y) int2(x,y)
 #endif
 #define SMAA_FLATTEN
 #define SMAA_BRANCH
@@ -946,8 +948,8 @@ float2 SMAACalculateDiagWeights(SMAATexture2D(edgesTex), SMAATexture2D(areaTex),
         // Fetch the crossing edges:
         float4 coords = mad(float4(-d.x + 0.25, d.x, d.y, -d.y - 0.25), SMAA_RT_METRICS.xyxy, texcoord.xyxy);
         float4 c;
-        c.xy = SMAASampleLevelZeroOffset(edgesTex, coords.xy, int2(-1,  0)).rg;
-        c.zw = SMAASampleLevelZeroOffset(edgesTex, coords.zw, int2( 1,  0)).rg;
+        c.xy = SMAASampleLevelZeroOffset(edgesTex, coords.xy, SMAAOffset(-1,  0)).rg;
+        c.zw = SMAASampleLevelZeroOffset(edgesTex, coords.zw, SMAAOffset( 1,  0)).rg;
         c.yxwz = SMAADecodeDiagBilinearAccess(c.xyzw);
 
         // Non-optimized version:
@@ -970,7 +972,7 @@ float2 SMAACalculateDiagWeights(SMAATexture2D(edgesTex), SMAATexture2D(areaTex),
 
     // Search for the line ends:
     d.xz = SMAASearchDiag2(SMAATexturePass2D(edgesTex), texcoord, float2(-1.0, -1.0), end);
-    if (SMAASampleLevelZeroOffset(edgesTex, texcoord, int2(1, 0)).r > 0.0) {
+    if (SMAASampleLevelZeroOffset(edgesTex, texcoord, SMAAOffset(1, 0)).r > 0.0) {
         d.yw = SMAASearchDiag2(SMAATexturePass2D(edgesTex), texcoord, float2(1.0, 1.0), end);
         d.y += float(end.y > 0.9);
     } else
@@ -981,9 +983,9 @@ float2 SMAACalculateDiagWeights(SMAATexture2D(edgesTex), SMAATexture2D(areaTex),
         // Fetch the crossing edges:
         float4 coords = mad(float4(-d.x, -d.x, d.y, d.y), SMAA_RT_METRICS.xyxy, texcoord.xyxy);
         float4 c;
-        c.x  = SMAASampleLevelZeroOffset(edgesTex, coords.xy, int2(-1,  0)).g;
-        c.y  = SMAASampleLevelZeroOffset(edgesTex, coords.xy, int2( 0, -1)).r;
-        c.zw = SMAASampleLevelZeroOffset(edgesTex, coords.zw, int2( 1,  0)).gr;
+        c.x  = SMAASampleLevelZeroOffset(edgesTex, coords.xy, SMAAOffset(-1,  0)).g;
+        c.y  = SMAASampleLevelZeroOffset(edgesTex, coords.xy, SMAAOffset( 0, -1)).r;
+        c.zw = SMAASampleLevelZeroOffset(edgesTex, coords.zw, SMAAOffset( 1,  0)).gr;
         float2 cc = mad(float2(2.0, 2.0), c.xz, c.yw);
 
         // Remove the crossing edge if we didn't found the end of the line:
@@ -1125,10 +1127,10 @@ void SMAADetectHorizontalCornerPattern(SMAATexture2D(edgesTex), inout float2 wei
     rounding /= leftRight.x + leftRight.y; // Reduce blending for pixels in the center of a line.
 
     float2 factor = float2(1.0, 1.0);
-    factor.x -= rounding.x * SMAASampleLevelZeroOffset(edgesTex, texcoord.xy, int2(0,  1)).r;
-    factor.x -= rounding.y * SMAASampleLevelZeroOffset(edgesTex, texcoord.zw, int2(1,  1)).r;
-    factor.y -= rounding.x * SMAASampleLevelZeroOffset(edgesTex, texcoord.xy, int2(0, -2)).r;
-    factor.y -= rounding.y * SMAASampleLevelZeroOffset(edgesTex, texcoord.zw, int2(1, -2)).r;
+    factor.x -= rounding.x * SMAASampleLevelZeroOffset(edgesTex, texcoord.xy, SMAAOffset(0,  1)).r;
+    factor.x -= rounding.y * SMAASampleLevelZeroOffset(edgesTex, texcoord.zw, SMAAOffset(1,  1)).r;
+    factor.y -= rounding.x * SMAASampleLevelZeroOffset(edgesTex, texcoord.xy, SMAAOffset(0, -2)).r;
+    factor.y -= rounding.y * SMAASampleLevelZeroOffset(edgesTex, texcoord.zw, SMAAOffset(1, -2)).r;
 
     weights *= saturate(factor);
     #endif
@@ -1142,10 +1144,10 @@ void SMAADetectVerticalCornerPattern(SMAATexture2D(edgesTex), inout float2 weigh
     rounding /= leftRight.x + leftRight.y;
 
     float2 factor = float2(1.0, 1.0);
-    factor.x -= rounding.x * SMAASampleLevelZeroOffset(edgesTex, texcoord.xy, int2( 1, 0)).g;
-    factor.x -= rounding.y * SMAASampleLevelZeroOffset(edgesTex, texcoord.zw, int2( 1, 1)).g;
-    factor.y -= rounding.x * SMAASampleLevelZeroOffset(edgesTex, texcoord.xy, int2(-2, 0)).g;
-    factor.y -= rounding.y * SMAASampleLevelZeroOffset(edgesTex, texcoord.zw, int2(-2, 1)).g;
+    factor.x -= rounding.x * SMAASampleLevelZeroOffset(edgesTex, texcoord.xy, SMAAOffset( 1, 0)).g;
+    factor.x -= rounding.y * SMAASampleLevelZeroOffset(edgesTex, texcoord.zw, SMAAOffset( 1, 1)).g;
+    factor.y -= rounding.x * SMAASampleLevelZeroOffset(edgesTex, texcoord.xy, SMAAOffset(-2, 0)).g;
+    factor.y -= rounding.y * SMAASampleLevelZeroOffset(edgesTex, texcoord.zw, SMAAOffset(-2, 1)).g;
 
     weights *= saturate(factor);
     #endif
@@ -1204,7 +1206,7 @@ float4 SMAABlendingWeightCalculationPS(float2 texcoord,
         float2 sqrt_d = sqrt(d);
 
         // Fetch the right crossing edges:
-        float e2 = SMAASampleLevelZeroOffset(edgesTex, coords.zy, int2(1, 0)).r;
+        float e2 = SMAASampleLevelZeroOffset(edgesTex, coords.zy, SMAAOffset(1, 0)).r;
 
         // Ok, we know how this pattern looks like, now it is time for getting
         // the actual area:
@@ -1245,7 +1247,7 @@ float4 SMAABlendingWeightCalculationPS(float2 texcoord,
         float2 sqrt_d = sqrt(d);
 
         // Fetch the bottom crossing edges:
-        float e2 = SMAASampleLevelZeroOffset(edgesTex, coords.xz, int2(0, 1)).g;
+        float e2 = SMAASampleLevelZeroOffset(edgesTex, coords.xz, SMAAOffset(0, 1)).g;
 
         // Get the area for this direction:
         weights.ba = SMAAArea(SMAATexturePass2D(areaTex), sqrt_d, e1, e2, subsampleIndices.x);

@@ -9,6 +9,7 @@ USE_SNIS_XWINDOWS_HACKS=1
 PKG_CONFIG?=pkg-config
 SDL2_CONFIG?=sdl2-config
 SERVERSONLY ?= 0
+USE_GLES?=0
 
 # use "make OSX=1" for mac
 OSX=0
@@ -524,14 +525,21 @@ PNGCFLAGS:=$(shell $(PKG_CONFIG) --cflags libpng)
 SDLLIBS:=$(shell $(SDL2_CONFIG) --libs)
 SDLCFLAGS:=$(shell $(SDL2_CONFIG) --cflags)
 
-GLEWLIBS:=$(shell $(PKG_CONFIG) --libs-only-l glew)
-GLEWCFLAGS:=$(shell $(PKG_CONFIG) --cflags glew)
+ifeq (${USE_GLES},0)
+GLADLIBS=
+GLADCFLAGS=-Iextern/glad/include
+GRAPH_OBJS=$(OD)/glad-gl.o $(OD)/graph_dev_opengl.o $(OD)/opengl_cap.o
+else
+GLADLIBS=
+GLADCFLAGS=-Iextern/glad-es/include
+GRAPH_OBJS=$(OD)/glad-gles2.o $(OD)/graph_dev_gles.o $(OD)/gles_cap.o
+endif
 endif
 
 ifeq ($(OSX), 0)
 	CRYPTLIBS:=-lcrypt
 else
-	CRYPTLIBS:=""
+	CRYPTLIBS:=
 endif
 
 _COMMONOBJS=mathutils.o snis_alloc.o snis_socket_io.o snis_marshal.o \
@@ -571,10 +579,10 @@ _COMMONCLIENTOBJS= snis_ui_element.o snis_font.o snis_text_input.o \
 	snis_client_forker.o snis_process_options.o workqueue.o
 COMMONCLIENTOBJS=${COMMONOBJS} ${OGGOBJ} ${SNDOBJS} $(patsubst %,$(OD)/%,${_COMMONCLIENTOBJS}) 
 
-_CLIENTOBJS= shader.o graph_dev_opengl.o opengl_cap.o snis_graph.o snis_client.o joystick_config.o snis_xwindows_hacks.o png_utils.o
+_CLIENTOBJS= shader.o ${GRAPH_OBJS} snis_graph.o snis_client.o joystick_config.o snis_xwindows_hacks.o png_utils.o
 CLIENTOBJS=${COMMONCLIENTOBJS} $(patsubst %,$(OD)/%,${_CLIENTOBJS})
 
-_SDLCLIENTOBJS=shader.o graph_dev_opengl.o opengl_cap.o snis_graph.o mesh_viewer.o \
+_SDLCLIENTOBJS=shader.o ${GRAPH_OBJS} snis_graph.o mesh_viewer.o \
 				png_utils.o turret_aimer.o quat.o mathutils.o mesh.o \
 				mtwist.o material.o entity.o snis_alloc.o matrix.o stacktrace.o stl_parser.o \
 				snis_typeface.o snis_font.o string-utils.o ui_colors.o liang-barsky.o \
@@ -593,7 +601,7 @@ X11LIBS=$(shell $(PKG_CONFIG) --libs x11)
 X11CFLAGS=$(shell $(PKG_CONFIG) --cflags x11)
 
 SSGL=ssgl/libssglclient.a
-LIBS=-Lssgl -lssglclient -ldl -lm ${PNGLIBS} ${GLEWLIBS}
+LIBS=${GLADLIBS} -Lssgl -lssglclient -ldl -lm ${PNGLIBS}
 SERVERLIBS=-Lssgl -lssglclient ${LRTLIB} -ldl -lm ${LUALIBS} ${CRYPTLIBS}
 MULTIVERSELIBS=-Lssgl -lssglclient ${LRTLIB} -ldl -lm ${CRYPTLIBS}
 #
@@ -752,7 +760,7 @@ endif
 
 COMPILE=$(ECHO) '  COMPILE' $< && $(CC) ${MYCFLAGS} ${LUACFLAGS} -c -o $@ $<
 VORBISCOMPILE=$(ECHO) '  COMPILE' $< && $(CC) ${MYCFLAGS} ${VORBISFLAGS} ${SNDFLAGS} -c -o $@ $<
-SDLCOMPILE=$(ECHO) '  COMPILE' $< && $(CC) ${MYCFLAGS} ${SDLCFLAGS} ${X11CFLAGS} -c -o $@ $<
+SDLCOMPILE=$(ECHO) '  COMPILE' $< && $(CC) ${MYCFLAGS} ${GLADCFLAGS} ${SDLCFLAGS} ${X11CFLAGS} -c -o $@ $<
 SNISSERVERDBGCOMPILE=$(ECHO) '  COMPILE' $< && $(CC) -DSNIS_SERVER_DATA ${MYCFLAGS} ${LUACFLAGS} -c -o $(OD)/snis_server_debug.o $<
 SNISCLIENTDBGCOMPILE=$(ECHO) '  COMPILE' $< && $(CC) -DSNIS_CLIENT_DATA ${MYCFLAGS} ${LUACFLAGS} -c -o $(OD)/snis_client_debug.o $<
 
@@ -782,7 +790,7 @@ CMNMLINK=$(ECHO) '  LINK' $@ && $(CC) ${MYCFLAGS} -o $@ util/cloud-mask-normalma
 
 all:	bin/.t ${COMMONOBJS} ${SERVEROBJS} ${MULTIVERSEOBJS} ${CLIENTOBJS} ${BINPROGS} ${SCAD_PARAMS_FILES} ${DOCKING_PORT_FILES} ${METAINFOFILE}
 
-modeldata:	${SCAD_PARAMS_FILES} ${DOCKING_PORT_FILES} ${METAINFOFILE}
+modelmeta:	${SCAD_PARAMS_FILES} ${DOCKING_PORT_FILES} ${METAINFOFILE}
 
 # if you only want to build the servers, say on a cloud server
 # use WITHVOICECHAT=no SERVERSONLY=1 to avoid complaints from pkg-config
@@ -847,6 +855,15 @@ $(OD)/graph_dev_opengl.o : graph_dev_opengl.c graph_dev.h shader.h vertex.h tria
 $(OD)/opengl_cap.o : opengl_cap.c Makefile ${ODT}
 	$(Q)$(SDLCOMPILE)
 
+$(OD)/graph_dev_gles.o : graph_dev_gles.c graph_dev.h shader.h vertex.h triangle.h \
+		mtwist.h mathutils.h matrix.h quat.h mesh.h vec4.h snis_graph.h graph_dev.h \
+		material.h entity.h entity_private.h snis_typeface.h opengl_cap.h png_utils.h \
+		Makefile ${ODT}
+	$(Q)$(SDLCOMPILE)
+
+$(OD)/gles_cap.o : gles_cap.c Makefile ${ODT}
+	$(Q)$(SDLCOMPILE)
+
 $(OD)/graph_dev_mesh_stub.o:	graph_dev_mesh_stub.c graph_dev_mesh_stub.h ${ODT}
 	$(Q)$(COMPILE)
 
@@ -864,6 +881,12 @@ $(OD)/shader.o : shader.c Makefile ${ODT}
 
 %.docking_ports.h: %.scad
 	$(Q)$(EXTRACTDOCKINGPORTS)
+
+$(OD)/glad-gles2.o:	extern/glad-es/src/gles2.c
+	$(Q)$(COMPILE) -Iextern/glad-es/include
+
+$(OD)/glad-gl.o:	extern/glad/src/gl.c
+	$(Q)$(COMPILE) -Iextern/glad/include
 
 $(OD)/thrust_attachment.o:	thrust_attachment.c thrust_attachment.h Makefile ${ODT}
 	$(Q)$(COMPILE)
