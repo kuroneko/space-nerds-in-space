@@ -3167,10 +3167,12 @@ void graph_dev_start_frame(void)
 	glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 
 	if (draw_render_to_texture && render_target_2d.fbo > 0) {
+		PROFILE_ZONE_START_CTX(p_rtt_fbo, "graph_dev_start_frame:setup_2d_rtt_fbo");
 		resize_fbo_if_needed(&render_target_2d);
 		sgc.fbo_2d = render_target_2d.fbo;
 		glBindFramebuffer(GL_FRAMEBUFFER, render_target_2d.fbo);
 		glClear(GL_COLOR_BUFFER_BIT);
+		PROFILE_ZONE_END_CTX(p_rtt_fbo);
 	} else
 		sgc.fbo_2d = 0;
 
@@ -3207,11 +3209,14 @@ void graph_dev_start_frame(void)
 #endif
 
 	} else if (draw_render_to_texture && post_target0.fbo > 0) {
+		PROFILE_ZONE_START_CTX(p_rtt_fbo, "graph_dev_start_frame:setup_postprocess_rtt_fbo");
 
 		resize_fbo_if_needed(&post_target0);
 
 		glBindFramebuffer(GL_FRAMEBUFFER, post_target0.fbo);
 		sgc.fbo_3d = post_target0.fbo;
+
+		PROFILE_ZONE_END_CTX(p_rtt_fbo);
 	} else {
 		/* render direct to back buffer */
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -3219,8 +3224,10 @@ void graph_dev_start_frame(void)
 	}
 
 	/* clear the bound 3d buffer */
+	PROFILE_ZONE_START_CTX(p_clear, "graph_dev_start_frame:clear destination buffer");
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	sgc.fbo_current = sgc.fbo_3d;
+	PROFILE_ZONE_END_CTX(p_clear);
 
 	PROFILE_ZONE_END();
 }
