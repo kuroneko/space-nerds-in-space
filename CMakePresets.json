@@ -142,7 +142,6 @@
             "description": "Profile Build for Raspberry Pi 4/400",
             "displayName": "Raspberry Pi 4 Profile Build",
             "configurePreset": "profile-pi4"
-<<<<<<< HEAD
         },
         {
             "name": "debug-std",
