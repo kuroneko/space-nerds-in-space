@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(SNIS LANGUAGES C)
+project(SNIS VERSION 1.0.11.1 LANGUAGES C)
 
 if (UNIX)
 	set(SNIS_BUILD_SERVERS_DEFAULT ON)
@@ -66,6 +66,13 @@ find_library(MATH_LIBRARY m)
 # build build_info.h - legacy - needs fixing.
 include (cmake/generate_build_info.cmake)
 GenerateBuildInfo()
+
+# and the version header
+configure_file(snis_version.h.in ${CMAKE_BINARY_DIR}/generated/snis_version.h)
+
+# and the metainfo file
+string(TIMESTAMP SNIS_BUILD_DATE "%Y-%m-%d" UTC)
+configure_file(share/metainfo/io.github.smcameron.space-nerds-in-space.metainfo.xml.template ${CMAKE_BINARY_DIR}/io.github.smcameron.space-nerds-in-space.metainfo.xml @ONLY)
 
 # included/embeded libraries.
 add_subdirectory(ssgl)
@@ -279,6 +286,14 @@ target_link_libraries(snis_update_assets PRIVATE
 if(UNIX)
 	configure_file(snis_launcher.tmpl ${CMAKE_CURRENT_BINARY_DIR}/snis_launcher @ONLY NEWLINE_STYLE UNIX)
 	configure_file(util/update_assets_from_launcher.sh.tmpl ${CMAKE_CURRENT_BINARY_DIR}/update_assets_from_launcher.sh @ONLY NEWLINE_STYLE UNIX)
+
+	find_program(AWK NAMES gawk mawk awk)
+	configure_file(extract-data.sh.in ${CMAKE_CURRENT_BINARY_DIR}/extract-data.sh
+		FILE_PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
+	       	@ONLY 
+		NEWLINE_STYLE UNIX)
+	add_custom_target(modeldata ALL
+		COMMAND ${CMAKE_CURRENT_BINARY_DIR}/extract-data.sh)
 endif()
 
 if(SNIS_INSTALL_UTILS)
@@ -412,6 +427,11 @@ install(FILES
 	man/lsssgl.1
 	DESTINATION man/man1
 	PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ)
+install(FILES
+	${CMAKE_BINARY_DIR}/io.github.smcameron.space-nerds-in-space.metainfo.xml
+	DESTINATION share/metainfo
+	PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ)
+
 configure_file(cmake/install_snis_data.cmake.in ${CMAKE_CURRENT_BINARY_DIR}/install_snis_data.cmake @ONLY)
 install(SCRIPT ${CMAKE_CURRENT_BINARY_DIR}/install_snis_data.cmake)
 
