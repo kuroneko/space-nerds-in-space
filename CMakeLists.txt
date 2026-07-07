@@ -63,6 +63,10 @@ endif()
 # Search for the math library 'm'
 find_library(MATH_LIBRARY m)
 
+# does our toolchain support IPO/LTO
+include(CheckIPOSupported)
+check_ipo_supported(RESULT CAN_USE_IPO LANGUAGES C)
+
 # build build_info.h - legacy - needs fixing.
 include (cmake/generate_build_info.cmake)
 GenerateBuildInfo()
@@ -201,6 +205,9 @@ if(SNIS_USE_GLES)
 	target_sources(snis_client PUBLIC graph_dev_gles.c gles_cap.c)
 else()
 	target_sources(snis_client PUBLIC graph_dev_opengl.c opengl_cap.c)
+endif()
+if(CAN_USE_IPO)
+	set_target_properties(snis_client PROPERTIES INTERPROCEDURAL_OPTIMIZATION TRUE)
 endif()
 
 #target_compile_definitions(snis_client PRIVATE DATADIR="${SNIS_DATA_DIR}")
