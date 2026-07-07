@@ -11,6 +11,21 @@ option(SNIS_INSTALL_UTILS "Install Utilities" ON)
 option(SNIS_BUILD_SERVERS "Build the SNIS servers" ${SNIS_BUILD_SERVERS_DEFAULT})
 option(SNIS_WITH_VOICE_CHAT "Enable Voice Chat Support" ON)
 option(SNIS_USE_GLES "Use OpenGL ES instead of OpenGL" OFF)
+option(SNIS_PROFILE "Profile SNIS" OFF)
+
+include(FetchContent)
+FetchContent_Declare(
+		tracy
+		GIT_REPOSITORY https://github.com/wolfpld/tracy.git
+		GIT_TAG master
+		GIT_SHALLOW TRUE
+		GIT_PROGRESS TRUE
+)
+if(SNIS_PROFILE)
+	enable_language(CXX)
+	set(TRACY_ENABLE ON)
+	FetchContent_MakeAvailable(tracy)
+endif()
 
 find_package(SDL2 REQUIRED)
 find_package(PNG REQUIRED)
@@ -113,8 +128,13 @@ add_library(sniscommon OBJECT
 	starbase_metadata.c
 	string-utils.c
 	mikktspace/mikktspace.c
-	)
-target_link_libraries(sniscommon ${MATH_LIBRARY})
+	snis_profile.c
+)
+target_link_libraries(sniscommon PUBLIC ${MATH_LIBRARY})
+if(SNIS_PROFILE)
+	target_link_libraries(sniscommon PUBLIC Tracy::TracyClient)
+	target_compile_definitions(sniscommon PUBLIC ENABLE_PROFILING=1)
+endif()
 
 add_library(snisclientcommon OBJECT
 	docking_port.c
@@ -392,6 +412,5 @@ install(FILES
 	man/lsssgl.1
 	DESTINATION man/man1
 	PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ)
-configure_file(cmake/install_snis_data.cmake.in ${CMAKE_CURRENT_BINARY_DIR}/install_snis_data.cmake @ONLY)
-install(SCRIPT ${CMAKE_CURRENT_BINARY_DIR}/install_snis_data.cmake)
+install(SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/cmake/install_snis_data.cmake)
 
