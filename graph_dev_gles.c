@@ -2065,7 +2065,7 @@ static void graph_dev_raster_trans_wireframe_mesh(struct graph_dev_gl_trans_wire
 		glUniformMatrix4fv(single_color_shader.mvp_matrix_id, 1, GL_FALSE, &mat_mvp->m[0][0]);
 		glUniform4f(single_color_shader.color_id, line_color->red,
 			line_color->green, line_color->blue, 1.0);
-
+		
 		glEnableVertexAttribArray(single_color_shader.vertex_position_id);
 		glBindBuffer(GL_ARRAY_BUFFER, ptr->wireframe_lines_vertex_buffer);
 		glVertexAttribPointer(
@@ -2535,8 +2535,9 @@ extern int graph_dev_entity_render_order(struct entity *e)
 {
 	int does_blending = 0;
 
-	if (!e->material_ptr)
+	if (!e->material_ptr) {
 		return GRAPH_DEV_RENDER_NEAR_TO_FAR;
+	}
 
 	switch (e->material_ptr->type) {
 	case MATERIAL_NEBULA:
@@ -4093,7 +4094,7 @@ static void setup_smaa_effect(struct graph_dev_smaa_effect *effect)
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
+	
 
 	graph_dev_gen_texture(1, &effect->blend_target.color0_texture);
 	glBindTexture(GL_TEXTURE_2D, effect->blend_target.color0_texture);
@@ -5229,7 +5230,7 @@ void graph_dev_prepare_for_window(uint32_t *window_flags)
 	SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 4);
 	SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 4);
 	SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 16);
-
+	
 	// for GLES, we claim ES 2.0
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
