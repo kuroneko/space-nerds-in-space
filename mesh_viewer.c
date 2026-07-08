@@ -9,18 +9,16 @@
 #include <getopt.h>
 #include <locale.h>
 
-#ifdef __APPLE__
-#include <SDL2.h>
-#else
 #include <fenv.h>
 
+#ifndef __APPLE__
 /* For some reason I have to define this prototype myself, (defining _GNU_SOURCE before
  * including fenv.h doesn't help.)
  */
 extern int feenableexcept(int excepts); 
+#endif /* #ifndef __APPLE__ */
 
 #include <SDL.h>
-#endif
 
 #include "mtwist.h"
 #include "vertex.h"

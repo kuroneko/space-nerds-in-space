@@ -52,7 +52,7 @@
 #include <SDL.h>
 #include <fenv.h>
 #else
-#include <SDL2.h>
+#include <SDL.h>
 #endif
 
 #include "opengl_cap.h"
