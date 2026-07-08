@@ -11,7 +11,10 @@ int has_prefix(char *prefix, char *str);
 char *slurp_file(const char *path, int *bytes); /* returns allocated string containingg contents of file */
 void remove_single_quotes(char *text);
 int strchrcount(char *s, int c); /* returns count of occurrences of c within s */
+
+#ifndef __APPLE__
 size_t strlcpy(char *dest, const char *src, size_t n);
+#endif
 
 void format_function_pointer(char *buffer, void (*function_pointer)(void));
 
