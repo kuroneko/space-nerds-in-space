@@ -12,7 +12,11 @@ SERVERSONLY ?= 0
 USE_GLES?=0
 
 # use "make OSX=1" for mac
-OSX=0
+OSX?=0
+
+ifeq (${OSX},1)
+USE_SNIS_XWINDOWS_HACKS=0
+endif
 
 # -lrt is only needed for clock_gettime() and only for glibc before 2.17
 LRTLIB=$(shell ./check_for_lrt.sh -q)
@@ -597,8 +601,14 @@ NEBULANOISELIBS=-lm ${PNGLIBS}
 _GENERATE_SKYBOX_OBJS=generate_skybox.o open-simplex-noise.o png_utils.o mathutils.o quat.o mtwist.o
 GENERATE_SKYBOX_OBJS=$(patsubst %,$(OD)/%,${_GENERATE_SKYBOX_OBJS})
 GENERATE_SKYBOX_LIBS=-lm ${PNGLIBS}
+
+ifeq ($(OSX), 0)
 X11LIBS=$(shell $(PKG_CONFIG) --libs x11)
 X11CFLAGS=$(shell $(PKG_CONFIG) --cflags x11)
+else
+X11LIBS=
+X11CFLAGS=
+endif
 
 SSGL=ssgl/libssglclient.a
 LIBS=${GLADLIBS} -Lssgl -lssglclient -ldl -lm ${PNGLIBS}
@@ -719,11 +729,15 @@ MYCFLAGS=-DDESTDIR=${DESTDIR} -DPREFIX=${PREFIX} ${DEBUGFLAG} ${PROFILEFLAG} \
 	-DUSE_SNIS_XWINDOWS_HACKS=${USE_SNIS_XWINDOWS_HACKS} -fno-common \
 	-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3 -fsanitize=bounds \
 	-Warray-bounds \
-	-fstack-clash-protection -fstack-protector-strong -Wimplicit-fallthrough \
-	-Wl,-z,nodlopen -Wl,-z,noexecstack \
+	-fstack-protector-strong -Wimplicit-fallthrough \
+	${COMPSPECCFLAGS} -Wstrict-prototypes -fexceptions -Wshadow
+
+ifeq (${OSX}, 0)
+MYCFLAGS+= -Wl,-z,nodlopen -Wl,-z,noexecstack \
 	-Wl,-z,relro -Wl,-z,now \
 	-Wl,--as-needed -Wl,--no-copy-dt-needed-entries \
-	${COMPSPECCFLAGS} -Wstrict-prototypes -fexceptions -Wshadow
+	-fstack-clash-protection
+endif
 
 ifeq (${SERVERSONLY},0)
 VORBISFLAGS:=$(subst -I,-isystem ,$(shell $(PKG_CONFIG) --cflags vorbisfile))
@@ -758,11 +772,11 @@ Q=@
 ECHO=echo
 endif
 
-COMPILE=$(ECHO) '  COMPILE' $< && $(CC) ${MYCFLAGS} ${LUACFLAGS} -c -o $@ $<
+COMPILE=$(ECHO) '  COMPILE' $< && $(CC) ${MYCFLAGS} ${PNGCFLAGS} ${LUACFLAGS} -c -o $@ $<
 VORBISCOMPILE=$(ECHO) '  COMPILE' $< && $(CC) ${MYCFLAGS} ${VORBISFLAGS} ${SNDFLAGS} -c -o $@ $<
-SDLCOMPILE=$(ECHO) '  COMPILE' $< && $(CC) ${MYCFLAGS} ${GLADCFLAGS} ${SDLCFLAGS} ${X11CFLAGS} -c -o $@ $<
-SNISSERVERDBGCOMPILE=$(ECHO) '  COMPILE' $< && $(CC) -DSNIS_SERVER_DATA ${MYCFLAGS} ${LUACFLAGS} -c -o $(OD)/snis_server_debug.o $<
-SNISCLIENTDBGCOMPILE=$(ECHO) '  COMPILE' $< && $(CC) -DSNIS_CLIENT_DATA ${MYCFLAGS} ${LUACFLAGS} -c -o $(OD)/snis_client_debug.o $<
+SDLCOMPILE=$(ECHO) '  COMPILE' $< && $(CC) ${MYCFLAGS} ${PNGCFLAGS} ${GLADCFLAGS} ${SDLCFLAGS} ${X11CFLAGS} -c -o $@ $<
+SNISSERVERDBGCOMPILE=$(ECHO) '  COMPILE' $< && $(CC) -DSNIS_SERVER_DATA ${MYCFLAGS} ${PNGCFLAGS} ${LUACFLAGS} -c -o $(OD)/snis_server_debug.o $<
+SNISCLIENTDBGCOMPILE=$(ECHO) '  COMPILE' $< && $(CC) -DSNIS_CLIENT_DATA ${MYCFLAGS} ${PNGCFLAGS} ${LUACFLAGS} -c -o $(OD)/snis_client_debug.o $<
 
 CLIENTLINK=$(ECHO) '  LINK' $@ && $(CC) ${MYCFLAGS} ${SNDFLAGS} -o $@ ${X11LIBS} ${SDLCFLAGS} ${CLIENTOBJS} ${SDLLIBS} ${LIBS} ${SNDLIBS} $(LDFLAGS) ${LIBOPUS} ${X11LIBS}
 SDLCLIENTLINK=$(ECHO) '  LINK' $@ && $(CC) ${MYCFLAGS} ${SNDFLAGS} -o $@ ${SDLCFLAGS} ${SDLCLIENTOBJS} ${SDLLIBS} ${LIBS} ${SNDLIBS} $(LDFLAGS) ${X11LIBS}
@@ -1428,7 +1442,7 @@ bin/test_solarsystem_config:	test_solarsystem_config.c ${OD}/solarsystem_config.
 	$(CC) -o $@ $< ${OD}/solarsystem_config.o ${OD}/string-utils.o
 
 bin/test_crater:	$(OD)/test_crater.o $(OD)/crater.o $(OD)/mathutils.o $(OD)/mtwist.o ${OD}/png_utils.o ${BIN}
-	$(CC) -o $@ ${PNGCFLAGS} $(OD)/test_crater.o $(OD)/crater.o $(OD)/mtwist.o ${OD}/png_utils.o ${PNGLIBS} $(OD)/mathutils.o -lm
+	$(CC) -o $@ $(PNGCFLAGS) $(OD)/test_crater.o $(OD)/crater.o $(OD)/mtwist.o ${OD}/png_utils.o ${PNGLIBS} $(OD)/mathutils.o -lm
 
 ${MANSRCDIR}/snis_client.6.gz:	${MANSRCDIR}/snis_client.6
 	gzip -9 - < ${MANSRCDIR}/snis_client.6 > ${MANSRCDIR}/snis_client.6.gz
