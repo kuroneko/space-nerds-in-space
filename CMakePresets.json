@@ -1,65 +1,74 @@
 {
     "version": 8,
     "configurePresets": [
+	{
+	    "name": "default-params",
+	    "displayName": "Default Build Parameters for all platforms",
+	    "hidden": true,
+	    "installDir": "$env{HOME}/games/snis",
+	    "cacheVariables": {
+		    "SNIS_WITH_VOCIE_CHAT": true
+	    }
+	},
         {
             "name": "debug-gl",
             "displayName": "Debug Build targetting GL",
             "hidden": true,
+            "inherits": "default-params",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Debug",
-                "SNIS_USE_GLES": false,
-                "SNIS_WITH_VOICE_CHAT": true
+                "SNIS_USE_GLES": false
             }
         },
         {
             "name": "relwithdebinfo-gl",
             "displayName": "RelWithDebInfo Build targetting GL",
             "hidden": true,
+            "inherits": "default-params",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "RelWithDebInfo",
-                "SNIS_USE_GLES": false,
-                "SNIS_WITH_VOICE_CHAT": true
+                "SNIS_USE_GLES": false
             }
         },
         {
             "name": "profile-gl",
             "displayName": "RelWithDebInfo Profiling Build targettin GL",
             "hidden": true,
+            "inherits": "default-params",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "RelWithDebInfo",
                 "SNIS_USE_GLES": false,
-                "SNIS_WITH_VOICE_CHAT": true,
-                "SNIS_PROFILE": true
+                "SNIS_WITH_VOICE_CHAT": true
             }
         },
         {
             "name": "debug-gles",
             "displayName": "Debug Build targetting GLES",
             "hidden": true,
+            "inherits": "default-params",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Debug",
-                "SNIS_USE_GLES": true,
-                "SNIS_WITH_VOICE_CHAT": true
+                "SNIS_USE_GLES": true
             }
         },
         {
             "name": "relwithdebinfo-gles",
             "displayName": "RelWithDebInfo Build targetting GLES",
             "hidden": true,
+            "inherits": "default-params",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "RelWithDebInfo",
-                "SNIS_USE_GLES": true,
-                "SNIS_WITH_VOICE_CHAT": true
+                "SNIS_USE_GLES": true
             }
         },
         {
             "name": "profile-gles",
             "displayName": "RelWithDebInfo Profiling Build targettin GLES",
             "hidden": true,
+            "inherits": "default-params",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "RelWithDebInfo",
                 "SNIS_USE_GLES": true,
-                "SNIS_WITH_VOICE_CHAT": true,
                 "SNIS_PROFILE": true
             }
         },
@@ -160,6 +169,20 @@
             "description": "Profile Build",
             "displayName": "Standard System Profile Build",
             "configurePreset": "profile-std"
-        }
+        },
+	{
+	    "name": "install-std",
+	    "displayName": "Standard System Installation",
+	    "description": "Install a Release build for Standard Systems",
+	    "inherits": "relwithdebinfo-std",
+	    "targets": [ "all", "install" ]
+	},
+	{
+	    "name": "install-pi4",
+	    "displayName": "Raspbery Pi (or other ARM Linux) Installation",
+	    "description": "Install a Release build for Pi and other ARM Linux Systems",
+	    "inherits": "relwithdebinfo-pi4",
+	    "targets": [ "all", "install" ]
+	}
     ]
 }
