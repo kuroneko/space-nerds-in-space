@@ -7,7 +7,7 @@
 	    "hidden": true,
 	    "installDir": "$env{HOME}/games/snis",
 	    "cacheVariables": {
-		    "SNIS_WITH_VOCIE_CHAT": true
+		    "SNIS_WITH_VOICE_CHAT": true
 	    }
 	},
         {
