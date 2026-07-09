@@ -4390,11 +4390,11 @@ int graph_dev_setup(const char *asset_dir)
 #endif
 
 	if (GLAD_GL_EXT_sRGB) {
-		fprintf(stderr, "WARNING: No hardware support for SRGB colorspace - will force linear.\n");
+		fprintf(stderr, "WARNING: No support for SRGB colorspace - will force linear.\n");
 	}
 
 	if (GLAD_GL_EXT_discard_framebuffer) {
-		fprintf(stderr, "Has hardware support for discarding framebuffers.\n");
+		fprintf(stderr, "Has driver support for discarding framebuffers.\n");
 	}
 
 	if (GLAD_GL_NV_shader_noperspective_interpolation) {
