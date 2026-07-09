@@ -791,8 +791,7 @@ static void rts_ai_add_to_build_queue(int priority, int unittype, uint32_t build
 	rts_ai_build_queue_size++;
 }
 
-static int rts_ai_build_queue_compare(const void *a, const void *b,
-					__attribute__((unused)) void *cookie)
+static int rts_ai_build_queue_compare(const void *a, const void *b)
 {
 	const struct rts_ai_build_queue_entry *entry1 = a;
 	const struct rts_ai_build_queue_entry *entry2 = b;
@@ -813,9 +812,9 @@ static int rts_ai_build_queue_compare(const void *a, const void *b,
 
 static void rts_ai_sort_build_queue(void)
 {
-	qsort_r(rts_ai_build_queue, rts_ai_build_queue_size,
+	qsort(rts_ai_build_queue, rts_ai_build_queue_size,
 			sizeof(struct rts_ai_build_queue_entry),
-			rts_ai_build_queue_compare, NULL);
+			rts_ai_build_queue_compare);
 }
 
 static void rts_ai_build_queue_remove_entry(int n)
