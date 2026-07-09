@@ -4397,6 +4397,10 @@ int graph_dev_setup(const char *asset_dir)
 		fprintf(stderr, "Has hardware support for discarding framebuffers.\n");
 	}
 
+	if (GLAD_GL_NV_shader_noperspective_interpolation) {
+		fprintf(stderr, "Has driver support for \"noperspective\" interpolation in shaders\n");
+	}
+
 	int want8bit = 0;
 	int bitWidth = 0;
 	static const SDL_GLattr attrs[] = { SDL_GL_RED_SIZE, SDL_GL_GREEN_SIZE, SDL_GL_BLUE_SIZE };

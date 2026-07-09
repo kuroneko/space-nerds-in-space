@@ -39,7 +39,12 @@ attribute mediump vec3 edge_mask;
 uniform mediump vec2 Viewport;
 uniform highp mat4 ModelViewProjectionMatrix;
 
+#ifdef GL_NV_shader_noperspective_interpolation
+#extenstion GL_NV_shader_noperspective_interpolation : enable
+  noperspective varying mediump vec4 dist;
+#else
 varying mediump vec4 dist;
+#endif
 
 void main(void)
 {
@@ -69,13 +74,17 @@ void main(void)
 	mediump float d1 = length(cross(p - p2, v1)) / length(v1);
 	mediump float d2 = length(cross(p - p0, v2)) / length(v2);
 
+
+#ifdef GL_NV_shader_noperspective_interpolation
+	dist = vec4((d0 + edge_mask.x), (d1 + edge_mask.y), (d2 + edge_mask.z), 1.0);
+#else
 	// OpenGL(ES) performs perspective-correct interpolation
 	// (it divides by .w) but we want linear interpolation. To
 	// work around this, we premultiply by pos.w here and then
 	// multiple with the inverse (stored in dist.w) in the fragment
 	// shader to undo this operation.
 	dist = vec4(pos.w * (d0 + edge_mask.x), pos.w * (d1 + edge_mask.y), pos.w * (d2 + edge_mask.z), 1.0 / pos.w);
-
+#endif
 	gl_Position = pos;
 }
 
