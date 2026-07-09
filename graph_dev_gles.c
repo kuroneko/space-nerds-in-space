@@ -4352,6 +4352,14 @@ static void graph_dev_set_up_image_loader_work_queues(void)
 	loaded_images_wq = work_queue_init("txtr2gpu", IMAGE_LOADER_QUEUE_DEPTH, 0, NULL);
 }
 
+#ifdef DEBUG_GL
+static void gl_debug_callback(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length,
+		const GLchar *message, const void *userparam)
+{
+	fprintf(stderr, "GL: %s\n", message); fflush(stderr);
+}
+#endif
+
 int graph_dev_setup(const char *asset_dir)
 {
 	if (!gladLoadGLES2((GLADloadfunc)SDL_GL_GetProcAddress)) {
@@ -4368,6 +4376,18 @@ int graph_dev_setup(const char *asset_dir)
 	fprintf(stderr, "          Vendor:   %s\n", vendor);
 	fprintf(stderr, "          Renderer: %s\n", renderer);
 	fprintf(stderr, "          Shader Language Version: %s\n", glslversion);
+
+#ifdef DEBUG_GL
+	if (GLAD_GL_KHR_debug) {
+		fprintf(stderr, "KHR_debug is available - enabling GL ES Debugging\n");
+		glDebugMessageCallbackKHR(&gl_debug_callback, NULL);
+		glDebugMessageControlKHR(GL_DEBUG_SOURCE_API_KHR, GL_DONT_CARE, GL_DONT_CARE, 0, NULL, GL_TRUE);
+		glDebugMessageControlKHR(GL_DEBUG_SOURCE_SHADER_COMPILER_KHR, GL_DONT_CARE, GL_DONT_CARE, 0, NULL, GL_TRUE);
+		/* don't emit command buffer markers */
+		glDebugMessageControlKHR(GL_DONT_CARE, GL_DEBUG_TYPE_MARKER_KHR, GL_DONT_CARE, 0, NULL, GL_FALSE);
+		glEnable(GL_DEBUG_OUTPUT_KHR);
+	}
+#endif
 
 	if (GLAD_GL_EXT_sRGB) {
 		fprintf(stderr, "WARNING: No hardware support for SRGB colorspace - will force linear.\n");
