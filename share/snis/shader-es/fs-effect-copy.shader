@@ -20,11 +20,11 @@
 
 
 #ifdef INCLUDE_VS
-	varying vec2 v_TexCoord;
-	uniform mat4 u_MVPMatrix;
+	varying mediump vec2 v_TexCoord;
+	uniform highp mat4 u_MVPMatrix;
 
-	attribute vec4 a_Position;
-	attribute vec2 a_TexCoord;
+	attribute highp vec4 a_Position;
+	attribute mediump vec2 a_TexCoord;
 
 	void main(void)
 	{
@@ -34,12 +34,12 @@
 #endif
 
 #ifdef INCLUDE_FS
-	varying vec2 v_TexCoord;
-	uniform sampler2D texture0Sampler;
-	uniform vec4 u_TintColor;
+	varying mediump vec2 v_TexCoord;
+	uniform lowp sampler2D texture0Sampler;
+	uniform lowp vec4 u_TintColor;
 
 	void main() {
-		vec4 tex_color = texture2D(texture0Sampler, v_TexCoord);
+		lowp vec4 tex_color = texture2D(texture0Sampler, v_TexCoord);
 
 		gl_FragColor = u_TintColor * tex_color;
 	}

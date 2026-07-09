@@ -1,14 +1,14 @@
 
 
 #if defined(INCLUDE_VS)
-	varying vec4 v_TintColor;
-	varying vec2 v_TexCoord;      // This will be passed into the fragment shader.
+	varying lowp vec4 v_TintColor;
+	varying mediump vec2 v_TexCoord;      // This will be passed into the fragment shader.
 
-	uniform mat4 u_MVPMatrix;  // A constant representing the combined model/view/projection matrix.
-	uniform vec4 u_TintColor;
+	uniform highp mat4 u_MVPMatrix;  // A constant representing the combined model/view/projection matrix.
+	uniform lowp vec4 u_TintColor;
 
-	attribute vec3 a_Position; // Per-vertex position information we will pass in.
-	attribute vec2 a_TexCoord; // Per-vertex texture coord we will pass in.
+	attribute highp vec3 a_Position; // Per-vertex position information we will pass in.
+	attribute mediump vec2 a_TexCoord; // Per-vertex texture coord we will pass in.
 
 	void main()
 	{
@@ -19,9 +19,9 @@
 #endif
 
 #if defined(INCLUDE_FS)
-	varying vec4 v_TintColor;
-	varying vec2 v_TexCoord;      // This will be passed into the fragment shader.
-	uniform sampler2D u_AlbedoTex;
+	varying lowp vec4 v_TintColor;
+	varying mediump vec2 v_TexCoord;      // This will be passed into the fragment shader.
+	uniform lowp sampler2D u_AlbedoTex;
 
 	void main()
 	{

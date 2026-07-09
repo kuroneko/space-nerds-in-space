@@ -21,34 +21,34 @@
  *  Alexandros Frantzis (glmark2)
  */
 
-uniform mat4 u_MVPMatrix;
-uniform vec2 u_Viewport;
+uniform highp mat4 u_MVPMatrix;
+uniform mediump vec2 u_Viewport;
 
-attribute vec4 a_MultiOne;
-attribute vec4 a_Position;
+attribute mediump vec4 a_MultiOne;
+attribute highp vec4 a_Position;
 // Coordinates of the line vertices this vertex belongs to
-attribute vec4 a_LineVertex0;
-attribute vec4 a_LineVertex1;
+attribute highp vec4 a_LineVertex0;
+attribute highp vec4 a_LineVertex1;
 
-varying float v_IsDotted;
-varying vec4 v_Dist;
+varying mediump float v_IsDotted;
+varying mediump vec4 v_Dist;
 
 void main(void)
 {
 	// Get the clip coordinates of all vertices
-	vec4 pos  = u_MVPMatrix * a_Position;
-	vec4 pos0 = u_MVPMatrix * a_LineVertex0;
-	vec4 pos1 = u_MVPMatrix * a_LineVertex1;
+	highp vec4 pos  = u_MVPMatrix * a_Position;
+	highp vec4 pos0 = u_MVPMatrix * a_LineVertex0;
+	highp vec4 pos1 = u_MVPMatrix * a_LineVertex1;
 
 	// Get the screen coordinates of all vertices
-	vec2 p  = 0.5 * u_Viewport * (pos.xy / pos.w);
-	vec2 p0 = 0.5 * u_Viewport * (pos0.xy / pos0.w);
-	vec2 p1 = 0.5 * u_Viewport * (pos1.xy / pos1.w);
+	mediump vec2 p  = 0.5 * u_Viewport * (pos.xy / pos.w);
+	mediump vec2 p0 = 0.5 * u_Viewport * (pos0.xy / pos0.w);
+	mediump vec2 p1 = 0.5 * u_Viewport * (pos1.xy / pos1.w);
 
 	// Calculate the distance of the current vertex from all
 	// the line ends.
-	float d0 = length(p - p0);
-	float d1 = length(p - p1);
+	mediump float d0 = length(p - p0);
+	mediump float d1 = length(p - p1);
 
 	// OpenGL(ES) performs perspective-correct interpolation
 	// (it divides by .w) but we want linear interpolation. To

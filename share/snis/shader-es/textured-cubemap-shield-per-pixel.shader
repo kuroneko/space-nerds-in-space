@@ -23,16 +23,16 @@
 
 
 #if defined(INCLUDE_VS)
-	varying vec3 v_Position;
-	varying vec3 v_Normal;
-	varying vec3 v_TexCoord;
+	varying highp vec3 v_Position;
+	varying mediump vec3 v_Normal;
+	varying mediump vec3 v_TexCoord;
 
-	uniform mat4 u_MVPMatrix;  // A constant representing the combined model/view/projection matrix.
-	uniform mat4 u_MVMatrix;   // A constant representing the combined model/view matrix.
-	uniform mat3 u_NormalMatrix;
+	uniform highp mat4 u_MVPMatrix;  // A constant representing the combined model/view/projection matrix.
+	uniform highp mat4 u_MVMatrix;   // A constant representing the combined model/view matrix.
+	uniform mediump mat3 u_NormalMatrix;
 
-	attribute vec4 a_Position; // Per-vertex position information we will pass in.
-	attribute vec3 a_Normal;   // Per-vertex normal information we will pass in.
+	attribute highp vec4 a_Position; // Per-vertex position information we will pass in.
+	attribute mediump vec3 a_Normal;   // Per-vertex normal information we will pass in.
 
 	void main()
 	{
@@ -51,13 +51,13 @@
 #endif
 
 #if defined(INCLUDE_FS)
-	varying vec3 v_Position;
-	varying vec3 v_Normal;
-	varying vec3 v_TexCoord;
+	varying highp vec3 v_Position;
+	varying mediump vec3 v_Normal;
+	varying mediump vec3 v_TexCoord;
 
-	uniform samplerCube u_AlbedoTex;
-	uniform vec4 u_TintColor;
-	uniform vec3 u_LightPos;   // The position of the light in eye space.
+	uniform lowp samplerCube u_AlbedoTex;
+	uniform lowp vec4 u_TintColor;
+	uniform highp vec3 u_LightPos;   // The position of the light in eye space.
 	
 	void main()
 	{

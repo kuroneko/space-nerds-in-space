@@ -1,5 +1,5 @@
 
-uniform vec4 u_Color;      // Per-object color information we will pass in.
+uniform lowp vec4 u_Color;      // Per-object color information we will pass in.
 
 void main()
 {

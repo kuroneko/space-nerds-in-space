@@ -1,4 +1,4 @@
-varying vec3 v_Color;      // Per-vertex color information
+varying lowp vec3 v_Color;      // Per-vertex color information
 
 void main()
 {

@@ -20,20 +20,20 @@
  *  Alexandros Frantzis (glmark2)
  */
 
-varying vec4 dist;
+varying mediump vec4 dist;
 
-uniform vec3 line_color;
-uniform vec3 triangle_color;
+uniform lowp vec3 line_color;
+uniform lowp vec3 triangle_color;
 
 void main(void)
 {
 	// Get the minimum distance of this fragment from a triangle edge.
 	// We need to multiply with dist.w to undo the workaround we had
 	// to perform to get linear interpolation (instead of perspective correct).
-	float d = min(dist.x * dist.w, min(dist.y * dist.w, dist.z * dist.w));
+	mediump float d = min(dist.x * dist.w, min(dist.y * dist.w, dist.z * dist.w));
 
 	// Get the intensity of the wireframe line
-	float i = exp2(-2.0 * d * d);
+	lowp float i = exp2(-2.0 * d * d);
 
 	gl_FragColor = vec4(mix(triangle_color, line_color, i), 1.0);
 }

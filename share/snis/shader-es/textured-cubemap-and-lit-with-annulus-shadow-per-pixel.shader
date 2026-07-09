@@ -21,25 +21,25 @@
 		Jeremy Van Grinsven, Stephen M. Cameron
 */
 #if defined(INCLUDE_VS)
-	varying vec3 v_Position;
-	varying vec3 v_Normal;
-	varying vec3 v_TexCoord;
+	varying highp vec3 v_Position;
+	varying mediump vec3 v_Normal;
+	varying mediump vec3 v_TexCoord;
 
 	#if defined(USE_NORMAL_MAP)
-	varying vec3 v_Tangent;
-	varying vec3 v_BiTangent;
-	varying mat3 tbn;
+	varying mediump vec3 v_Tangent;
+	varying mediump vec3 v_BiTangent;
+	varying mediump mat3 tbn;
 	#endif
 
-	uniform mat4 u_MVPMatrix;  // A constant representing the combined model/view/projection matrix.
-	uniform mat4 u_MVMatrix;   // A constant representing the combined model/view matrix.
-	uniform mat3 u_NormalMatrix;
+	uniform highp mat4 u_MVPMatrix;  // A constant representing the combined model/view/projection matrix.
+	uniform highp mat4 u_MVMatrix;   // A constant representing the combined model/view matrix.
+	uniform mediump mat3 u_NormalMatrix;
 
-	attribute vec4 a_Position; // Per-vertex position information we will pass in.
-	attribute vec3 a_Normal;   // Per-vertex normal, tangent, and bitangent information we will pass in.
+	attribute highp vec4 a_Position; // Per-vertex position information we will pass in.
+	attribute mediump vec3 a_Normal;   // Per-vertex normal, tangent, and bitangent information we will pass in.
 #if defined(USE_NORMAL_MAP)
-	attribute vec3 a_Tangent;
-	attribute vec3 a_BiTangent;
+	attribute mediump vec3 a_Tangent;
+	attribute mediump vec3 a_BiTangent;
 #endif
 
 	void main()
@@ -64,50 +64,50 @@
 #endif
 
 #if defined(INCLUDE_FS)
-	varying vec3 v_Position;
-	varying vec3 v_Normal;
-	varying vec3 v_TexCoord;
+	varying highp vec3 v_Position;
+	varying mediump vec3 v_Normal;
+	varying mediump vec3 v_TexCoord;
 
 	#if defined(USE_NORMAL_MAP)
-	varying vec3 v_Tangent;
-	varying vec3 v_BiTangent;
-	varying mat3 tbn;
+	varying mediump vec3 v_Tangent;
+	varying mediump vec3 v_BiTangent;
+	varying mediump mat3 tbn;
 	#endif
 
-	uniform samplerCube u_AlbedoTex;
-	uniform vec4 u_TintColor;
-	uniform vec3 u_LightPos;   // The position of the light in eye space.
-	uniform float u_Ambient;
+	uniform lowp samplerCube u_AlbedoTex;
+	uniform lowp vec4 u_TintColor;
+	uniform highp vec3 u_LightPos;   // The position of the light in eye space.
+	uniform lowp float u_Ambient;
 
 #if defined(USE_NORMAL_MAP)
-	uniform samplerCube u_NormalMapTex;
+	uniform lowp samplerCube u_NormalMapTex;
 #endif
 #if defined USE_SPECULAR
-	uniform vec3 u_WaterColor; // Color of water used in specular calculations
-	uniform vec3 u_SunColor; // Color of sun used in specular calculations
+	uniform lowp vec3 u_WaterColor; // Color of water used in specular calculations
+	uniform lowp vec3 u_SunColor; // Color of sun used in specular calculations
 #endif
 
 #if defined(USE_ANNULUS_SHADOW)
-	uniform sampler2D u_AnnulusAlbedoTex;
-	uniform vec3 u_AnnulusCenter; // center of disk in eye space
-	uniform vec3 u_AnnulusNormal; // disk plane normal in eye space
-	uniform vec4 u_AnnulusRadius; // x=inside r, y=inside r^2, z=outside r, w=outside r^2
-	uniform vec4 u_AnnulusTintColor;
-	uniform float u_ring_texture_v;
+	uniform lowp sampler2D u_AnnulusAlbedoTex;
+	uniform highp vec3 u_AnnulusCenter; // center of disk in eye space
+	uniform mediump vec3 u_AnnulusNormal; // disk plane normal in eye space
+	uniform mediump vec4 u_AnnulusRadius; // x=inside r, y=inside r^2, z=outside r, w=outside r^2
+	uniform lowp vec4 u_AnnulusTintColor;
+	uniform mediump float u_ring_texture_v;
 
-	bool intersect_plane(vec3 plane_normal, vec3 plane_pos, vec3 ray_pos, vec3 ray_dir, out float t)
+	bool intersect_plane(mediump vec3 plane_normal, highp vec3 plane_pos, highp vec3 ray_pos, highp vec3 ray_dir, out mediump float t)
 	{
-		float denom = dot(plane_normal, ray_dir);
+		highp float denom = dot(plane_normal, ray_dir);
 		if (abs(denom) > 0.000001) {
-			vec3 plane_dir = plane_pos - ray_pos;
+			highp vec3 plane_dir = plane_pos - ray_pos;
 			t = dot(plane_normal, plane_dir) / denom;
 			return t >= 0.0;
 		}
 		return false;
 	}
 
-	bool intersect_disc(vec3 disc_normal, vec3 disc_center, float r_squared, vec3 ray_pos,
-		vec3 ray_dir, out float dist2)
+	bool intersect_disc(mediump vec3 disc_normal, highp vec3 disc_center, mediump float r_squared, highp vec3 ray_pos,
+		highp vec3 ray_dir, out mediump float dist2)
 	{
 		float t = 0.0;
 		if (intersect_plane(disc_normal, disc_center, ray_pos, ray_dir, t)) {
@@ -123,26 +123,26 @@
 	void main()
 	{
 		/* Get a lighting direction vector from the light to the vertex. */
-		vec3 light_dir = normalize(u_LightPos - v_Position);
+		mediump vec3 light_dir = normalize(u_LightPos - v_Position);
 
 		/* Calculate the dot product of the light vector and vertex normal. If the normal and light vector are
 		   pointing in the same direction then it will get max illumination. */
-		float direct = dot(normalize(v_Normal), light_dir);
+		lowp float direct = dot(normalize(v_Normal), light_dir);
 
-		float shadow = 1.0;
+		lowp float shadow = 1.0;
 
 #if defined(USE_ANNULUS_SHADOW)
-		float intersect_r_squared;
+		mediump float intersect_r_squared;
 		if (direct > u_Ambient && intersect_disc(u_AnnulusNormal, u_AnnulusCenter, u_AnnulusRadius.w /* r3^2 */,
 				v_Position, light_dir, intersect_r_squared))
 		{
 			if (intersect_r_squared > u_AnnulusRadius.y /* r1^2 */ ) {
-				float ir = sqrt(u_AnnulusRadius.y);
+				mediump float ir = sqrt(u_AnnulusRadius.y);
 				/* figure out a texture coord on the ring that samples from u=0 to 1, v is given */
-				float u = (sqrt(intersect_r_squared) - ir) /
+				mediump float u = (sqrt(intersect_r_squared) - ir) /
 						(u_AnnulusRadius.z - ir);
 
-				vec4 ring_color = u_AnnulusTintColor * texture2D(u_AnnulusAlbedoTex, vec2(u, u_ring_texture_v));
+				lowp vec4 ring_color = u_AnnulusTintColor * texture2D(u_AnnulusAlbedoTex, vec2(u, u_ring_texture_v));
 
 				/* how much we will shadow based on transparancy, so 1.0=no shadow, 0.0=full */
 				shadow  = 1.0 - ring_color.a;
@@ -151,25 +151,25 @@
 #endif
 
 #if defined(USE_NORMAL_MAP)
-		vec3 norm_sample = normalize(textureCube(u_NormalMapTex, v_TexCoord).xyz * 2.0 - 1.0);
-		vec3 pixel_normal = tbn * norm_sample;
-		float normal_map_shadow = max(0.0, dot(pixel_normal, light_dir));
-		float diffuse = max(shadow * normal_map_shadow, u_Ambient);
+		lowp vec3 norm_sample = normalize(textureCube(u_NormalMapTex, v_TexCoord).xyz * 2.0 - 1.0);
+		lowp vec3 pixel_normal = tbn * norm_sample;
+		lowp float normal_map_shadow = max(0.0, dot(pixel_normal, light_dir));
+		lowp float diffuse = max(shadow * normal_map_shadow, u_Ambient);
 
 		/* If the normal is straight up, and the color is mostly blue, consider it water,
 		 * which then has a specular component.
 		 */
-		vec3 straight_up = vec3(0.0, 0.0, 1.0);
-		float straight_up_normal = step(0.98, dot(norm_sample, straight_up));
+		lowp vec3 straight_up = vec3(0.0, 0.0, 1.0);
+		lowp float straight_up_normal = step(0.98, dot(norm_sample, straight_up));
 
                 // blinn phong half vector specular
-                vec3 view_dir = normalize(-v_Position);
-                vec3 half_dir = normalize(light_dir + view_dir);
-                float n_dot_h = max(0.0, clamp(dot(v_Normal, half_dir), 0.0, 1.0));
+                lowp vec3 view_dir = normalize(-v_Position);
+                lowp vec3 half_dir = normalize(light_dir + view_dir);
+                lowp float n_dot_h = max(0.0, clamp(dot(v_Normal, half_dir), 0.0, 1.0));
 #if defined(USE_SPECULAR)
-		float SpecularPower = 512.0;
-		float SpecularIntensity = 0.9;
-                float spec = pow(n_dot_h, SpecularPower);
+		lowp float SpecularPower = 512.0;
+		lowp float SpecularIntensity = 0.9;
+                lowp float spec = pow(n_dot_h, SpecularPower);
 
 		/* Because we are presuming that the specular reflection is due to reflecting off water,
 		 * the reflectance varies with the angle of incidence (from Encyclopedia Brittannica).
@@ -185,13 +185,13 @@
 		 * and also exaggerate the brightness a little for looks.  Not really accurate, just kind of a
 		 * hack that looks ok.
 		 */
-		float reflectance = min(1.0, smoothstep(0.0, 0.8, 1.0 - direct) * 1.2 + 0.1);
+		lowp float reflectance = min(1.0, smoothstep(0.0, 0.8, 1.0 - direct) * 1.2 + 0.1);
 
-		vec3 specular_color = straight_up_normal * reflectance * u_SunColor * SpecularIntensity * spec;
+		lowp vec3 specular_color = straight_up_normal * reflectance * u_SunColor * SpecularIntensity * spec;
 #endif
 #else
 		/* make diffuse light atleast ambient */
-		float diffuse = max(direct * shadow, u_Ambient);
+		lowp float diffuse = max(direct * shadow, u_Ambient);
 #if defined(USE_SPECULAR)
 #endif
 #endif
@@ -200,8 +200,8 @@
 		gl_FragColor = textureCube(u_AlbedoTex, v_TexCoord);
 #if defined(USE_SPECULAR)
 		vec3 white = vec3(1.0, 1.0, 1.0);
-		float not_clouds = 1.0 - smoothstep(0.8, 1.0, dot(gl_FragColor.rgb, white));
-		float mostly_blue = smoothstep(0.75, 0.8, dot(normalize(u_WaterColor), normalize(gl_FragColor.rgb)));
+		lowp float not_clouds = 1.0 - smoothstep(0.8, 1.0, dot(gl_FragColor.rgb, white));
+		lowp float mostly_blue = smoothstep(0.75, 0.8, dot(normalize(u_WaterColor), normalize(gl_FragColor.rgb)));
 		gl_FragColor.rgb += specular_color * mostly_blue * not_clouds;
 #endif
 		gl_FragColor.rgb *= diffuse;

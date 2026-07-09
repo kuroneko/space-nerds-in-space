@@ -2,43 +2,43 @@
 #define USE_SPECULAR 1
 
 #ifdef USE_CUBEMAP
-	#define TEX_SAMPLER samplerCube
+	#define TEX_SAMPLER lowp samplerCube
 	#define TEX_READ textureCube
-	#define UV_TYPE vec3
+	#define UV_TYPE mediump vec3
 #else
-	#define TEX_SAMPLER sampler2D
+	#define TEX_SAMPLER lowp sampler2D
 	#define TEX_READ texture2D
-	#define UV_TYPE vec2
+	#define UV_TYPE mediump vec2
 #endif
 
 #ifdef USE_SPECULAR
-uniform float u_SpecularPower; /* 512 is a good value */
-uniform float u_SpecularIntensity; /* between 0 and 1, 1 is very shiny, 0 is flat */
+uniform lowp float u_SpecularPower; /* 512 is a good value */
+uniform lowp float u_SpecularIntensity; /* between 0 and 1, 1 is very shiny, 0 is flat */
 #endif
 
 #if defined(INCLUDE_VS)
-	varying vec3 v_Position;
+	varying highp vec3 v_Position;
 	varying UV_TYPE v_TexCoord;
-	varying vec3 v_Normal;
+	varying mediump vec3 v_Normal;
 
 	#ifdef USE_NORMAL_MAP
-		varying vec3 v_Tangent;
-		varying vec3 v_BiTangent;
-		varying mat3 tbn;
+		varying mediump vec3 v_Tangent;
+		varying mediump vec3 v_BiTangent;
+		varying mediump mat3 tbn;
 	#endif
 
-	uniform mat4 u_MVPMatrix;
-	uniform mat4 u_MVMatrix;
-	uniform mat3 u_NormalMatrix;
+	uniform highp mat4 u_MVPMatrix;
+	uniform highp mat4 u_MVMatrix;
+	uniform mediump mat3 u_NormalMatrix;
 
-	attribute vec4 a_Position;
+	attribute highp vec4 a_Position;
 	#if !defined(USE_CUBEMAP)
-		attribute vec2 a_TexCoord;
+		attribute mediump vec2 a_TexCoord;
 	#endif
-	attribute vec3 a_Normal;
+	attribute mediump vec3 a_Normal;
 	#ifdef USE_NORMAL_MAP
-		attribute vec3 a_Tangent;
-		attribute vec3 a_BiTangent;
+		attribute mediump vec3 a_Tangent;
+		attribute mediump vec3 a_BiTangent;
 	#endif
 
 	void main()
@@ -62,22 +62,22 @@ uniform float u_SpecularIntensity; /* between 0 and 1, 1 is very shiny, 0 is fla
 #endif
 
 #if defined(INCLUDE_FS)
-	varying vec3 v_Position;
+	varying highp vec3 v_Position;
 	varying UV_TYPE v_TexCoord;
-	varying vec3 v_Normal;
+	varying mediump vec3 v_Normal;
 
 	#ifdef USE_NORMAL_MAP
-		varying vec3 v_Tangent;
-		varying vec3 v_BiTangent;
-		varying mat3 tbn;
+		varying mediump vec3 v_Tangent;
+		varying mediump vec3 v_BiTangent;
+		varying mediump mat3 tbn;
 	#endif
 
 	uniform TEX_SAMPLER u_AlbedoTex;
-	uniform vec3 u_LightPos;
-	vec3 u_LightColor = vec3(1);
-	uniform vec4 u_TintColor;
-	uniform float u_in_shade;
-	uniform float u_Ambient;
+	uniform highp vec3 u_LightPos;
+	lowp vec3 u_LightColor = vec3(1);
+	uniform lowp vec4 u_TintColor;
+	uniform lowp float u_in_shade;
+	uniform lowp float u_Ambient;
 
 	#ifdef USE_NORMAL_MAP
 		uniform TEX_SAMPLER u_NormalMapTex;
@@ -86,47 +86,47 @@ uniform float u_SpecularIntensity; /* between 0 and 1, 1 is very shiny, 0 is fla
 		#ifdef USE_SPECULAR_MAP
 			uniform TEX_SAMPLER u_SpecularTex;
 		#else
-			vec3 u_SpecularColor = vec3(1);
+			lowp vec3 u_SpecularColor = vec3(1);
 		#endif
 	#endif
 	#ifdef USE_EMIT_MAP
 		uniform TEX_SAMPLER u_EmitTex;
-		uniform float u_EmitIntensity;
+		uniform lowp float u_EmitIntensity;
 	#endif
 
 	void main()
 	{
 		UV_TYPE uv = v_TexCoord;
 
-		vec3 light_dir = normalize(u_LightPos - v_Position);
+		mediump vec3 light_dir = normalize(u_LightPos - v_Position);
 
 		#ifdef USE_NORMAL_MAP
 			// Hmm, this still needs work.
 			// vec3 normal = normalize(tbn * normalize(TEX_READ(u_NormalMapTex, uv).xyz * 2.0 - 1.0));
-			vec3 normal = normalize(tbn * (TEX_READ(u_NormalMapTex, uv).xyz * 2.0 - 1.0));
+			mediump vec3 normal = normalize(tbn * (TEX_READ(u_NormalMapTex, uv).xyz * 2.0 - 1.0));
 			// vec3 normal = tbn * normalize(TEX_READ(u_NormalMapTex, uv).xyz);
 		#else
-			vec3 normal = v_Normal;
+			mediump vec3 normal = v_Normal;
 		#endif
 
 		// albedo from texture
-		vec4 albedo = TEX_READ(u_AlbedoTex, uv);
+		lowp vec4 albedo = TEX_READ(u_AlbedoTex, uv);
 
 		// diffuse is light dot normal
-		float diffuse = max(u_Ambient, (1.0 - u_in_shade) * clamp(dot(normal, light_dir), 0.0, 1.0));
+		lowp float diffuse = max(u_Ambient, (1.0 - u_in_shade) * clamp(dot(normal, light_dir), 0.0, 1.0));
 
 		// base diffuse color
-		vec3 color = albedo.rgb * u_LightColor * diffuse;
+		lowp vec3 color = albedo.rgb * u_LightColor * diffuse;
 
 		#ifdef USE_EMIT_MAP
 			color = max(color, u_EmitIntensity * TEX_READ(u_EmitTex, uv).rgb);
 		#endif
 		#ifdef USE_SPECULAR
 			// blinn phong half vector specular
-			vec3 view_dir = normalize(-v_Position);
-			vec3 half_dir = normalize(light_dir + view_dir);
-			float n_dot_h = max(0.0, clamp(dot(normal, half_dir), 0.0, 1.0));
-			float spec = pow(n_dot_h, u_SpecularPower);
+			mediump vec3 view_dir = normalize(-v_Position);
+			mediump vec3 half_dir = normalize(light_dir + view_dir);
+			lowp float n_dot_h = max(0.0, clamp(dot(normal, half_dir), 0.0, 1.0));
+			lowp float spec = pow(n_dot_h, u_SpecularPower);
 
 			color += u_SpecularColor * u_SpecularIntensity * spec;
 		#endif

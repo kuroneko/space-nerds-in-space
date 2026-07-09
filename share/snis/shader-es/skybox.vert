@@ -1,8 +1,8 @@
 
-uniform mat4 MVP;
+uniform highp mat4 MVP;
 
-attribute vec3 vertex;
-varying vec3 texCoord;
+attribute highp vec3 vertex;
+varying mediump vec3 texCoord;
 
 void main() {
 	texCoord = vertex;

@@ -21,20 +21,20 @@
  *  Alexandros Frantzis (glmark2)
  */
 
-uniform float u_DotSize;
-uniform float u_DotPitch;
-uniform vec4 u_LineColor;
+uniform mediump float u_DotSize;
+uniform mediump float u_DotPitch;
+uniform lowp vec4 u_LineColor;
 
-varying float v_IsDotted;
-varying vec4 v_Dist;
+varying mediump float v_IsDotted;
+varying mediump vec4 v_Dist;
 
 void main(void)
 {
-	float i = 1.0;
+	lowp float i = 1.0;
 
 	if (v_IsDotted > 0.0) {
 		// Get the distance from line end 0
-		float d = (mod(v_Dist.x * v_Dist.w, u_DotPitch) - u_DotPitch/2.0) / u_DotSize;
+		lowp float d = (mod(v_Dist.x * v_Dist.w, u_DotPitch) - u_DotPitch/2.0) / u_DotSize;
 
 		// Get the intensity of the wireframe line
 		i = exp2(-2.0 * d * d);

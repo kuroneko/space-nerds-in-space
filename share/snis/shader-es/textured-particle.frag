@@ -1,8 +1,8 @@
 
-uniform sampler2D u_AlbedoTex;
+uniform lowp sampler2D u_AlbedoTex;
 
-varying vec2 v_TexCoord;
-varying vec4 v_TintColor;
+varying mediump vec2 v_TexCoord;
+varying lowp vec4 v_TintColor;
 
 void main()
 {

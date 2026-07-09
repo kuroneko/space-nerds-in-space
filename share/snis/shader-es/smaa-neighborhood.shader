@@ -19,13 +19,13 @@
 */
 
 #if defined(INCLUDE_VS)
-	varying vec2 v_TexCoord;
-	varying vec4 v_Offset;
+	varying mediump vec2 v_TexCoord;
+	varying highp vec4 v_Offset;
 
-	uniform mat4 u_MVPMatrix;
+	uniform highp mat4 u_MVPMatrix;
 
-	attribute vec4 a_Position;
-	attribute vec2 a_TexCoord;
+	attribute highp vec4 a_Position;
+	attribute mediump vec2 a_TexCoord;
 
 	void main()
 	{
@@ -37,10 +37,10 @@
 #endif
 
 #if defined(INCLUDE_FS)
-	varying vec2 v_TexCoord;
-	varying vec4 v_Offset;
-	uniform sampler2D u_AlbedoTex;
-	uniform sampler2D u_BlendTex;
+	varying mediump vec2 v_TexCoord;
+	varying highp vec4 v_Offset;
+	uniform lowp sampler2D u_AlbedoTex;
+	uniform lowp sampler2D u_BlendTex;
 
 	void main()
 	{

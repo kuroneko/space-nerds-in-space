@@ -1,29 +1,29 @@
 
-uniform mat4 u_MVPMatrix;  // A constant representing the combined model/view/projection matrix.
-uniform mat4 u_MVMatrix;   // A constant representing the combined model/view matrix.
-uniform mat3 u_NormalMatrix;
-uniform vec3 u_Color;      // Per-object color information we will pass in.
-uniform vec4 u_ClipSphere; // clipping sphere, x,y,z=center in eye space
+uniform highp mat4 u_MVPMatrix;  // A constant representing the combined model/view/projection matrix.
+uniform highp mat4 u_MVMatrix;   // A constant representing the combined model/view matrix.
+uniform mediump mat3 u_NormalMatrix;
+uniform lowp vec3 u_Color;      // Per-object color information we will pass in.
+uniform highp vec4 u_ClipSphere; // clipping sphere, x,y,z=center in eye space
 
-attribute vec4 a_Position; // Per-vertex position information we will pass in.
-attribute vec3 a_Normal;   // Per-vertex normal information we will pass in.
+attribute highp vec4 a_Position; // Per-vertex position information we will pass in.
+attribute mediump vec3 a_Normal;   // Per-vertex normal information we will pass in.
 
-varying vec2 v_FragRadius; // fragment distance to sphere center
-varying float v_EyeDot;
-varying float v_ClipSphereDot;
+varying mediump vec2 v_FragRadius; // fragment distance to sphere center
+varying lowp float v_EyeDot;
+varying lowp float v_ClipSphereDot;
 
 void main()
 {
-	vec4 pos = u_MVPMatrix * a_Position;
+	highp vec4 pos = u_MVPMatrix * a_Position;
 
 	// Transform the vertex into eye space.
-	vec3 modelViewVertex = vec3(u_MVMatrix * a_Position);
+	highp vec3 modelViewVertex = vec3(u_MVMatrix * a_Position);
 
 	// Transform the normal's orientation into eye space.
-	vec3 modelViewNormal = normalize(u_NormalMatrix * a_Normal);
+	mediump vec3 modelViewNormal = normalize(u_NormalMatrix * a_Normal);
 
-	vec3 eyeVector = normalize(-modelViewVertex);
-	vec3 clipSphereVector = normalize(u_ClipSphere.xyz - modelViewVertex);
+	mediump vec3 eyeVector = normalize(-modelViewVertex);
+	mediump vec3 clipSphereVector = normalize(u_ClipSphere.xyz - modelViewVertex);
 
 	v_EyeDot = dot(modelViewNormal, eyeVector);
 	v_ClipSphereDot = dot(modelViewNormal, clipSphereVector);
