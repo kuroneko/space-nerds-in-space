@@ -1,0 +1,188 @@
+{
+    "version": 8,
+    "configurePresets": [
+	{
+	    "name": "default-params",
+	    "displayName": "Default Build Parameters for all platforms",
+	    "hidden": true,
+	    "installDir": "$env{HOME}/games/snis",
+	    "cacheVariables": {
+		    "SNIS_WITH_VOICE_CHAT": true
+	    }
+	},
+        {
+            "name": "debug-gl",
+            "displayName": "Debug Build targetting GL",
+            "hidden": true,
+            "inherits": "default-params",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "SNIS_USE_GLES": false
+            }
+        },
+        {
+            "name": "relwithdebinfo-gl",
+            "displayName": "RelWithDebInfo Build targetting GL",
+            "hidden": true,
+            "inherits": "default-params",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+                "SNIS_USE_GLES": false
+            }
+        },
+        {
+            "name": "profile-gl",
+            "displayName": "RelWithDebInfo Profiling Build targettin GL",
+            "hidden": true,
+            "inherits": "default-params",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+                "SNIS_USE_GLES": false,
+                "SNIS_WITH_VOICE_CHAT": true
+            }
+        },
+        {
+            "name": "debug-gles",
+            "displayName": "Debug Build targetting GLES",
+            "hidden": true,
+            "inherits": "default-params",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "SNIS_USE_GLES": true
+            }
+        },
+        {
+            "name": "relwithdebinfo-gles",
+            "displayName": "RelWithDebInfo Build targetting GLES",
+            "hidden": true,
+            "inherits": "default-params",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+                "SNIS_USE_GLES": true
+            }
+        },
+        {
+            "name": "profile-gles",
+            "displayName": "RelWithDebInfo Profiling Build targettin GLES",
+            "hidden": true,
+            "inherits": "default-params",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+                "SNIS_USE_GLES": true,
+                "SNIS_PROFILE": true
+            }
+        },
+        {
+            "name": "debug-pi4",
+            "displayName": "Raspberry Pi 4 Debug Build",
+            "description": "Debug Build oriented for the Raspberry Pi 4/400 family",
+            "inherits": "debug-gles",
+            "hidden": false,
+            "generator": "Ninja",
+            "binaryDir": "out/build/${presetName}",
+            "installDir": "out/install/${presetName}"
+        },
+        {
+            "name": "relwithdebinfo-pi4",
+            "displayName": "Raspberry Pi 4 RelWithDebInfo Build",
+            "description": "RelWithDebInfo Build oriented for the Raspberry Pi 4/400 family",
+            "inherits": "relwithdebinfo-gles",
+            "hidden": false,
+            "generator": "Ninja",
+            "binaryDir": "out/build/${presetName}",
+            "installDir": "out/install/${presetName}"
+        },
+        {
+            "name": "profile-pi4",
+            "displayName": "Raspberry Pi 4 Profiling Build",
+            "description": "Profiling Build oriented for the Raspberry Pi 4/400 family",
+            "inherits": "profile-gles",
+            "hidden": false,
+            "generator": "Ninja",
+            "binaryDir": "out/build/${presetName}",
+            "installDir": "out/install/${presetName}"
+        },
+        {
+            "name": "debug-std",
+            "displayName": "Standard System Debug Build",
+            "description": "Debug Build",
+            "inherits": "debug-gl",
+            "hidden": false,
+            "generator": "Ninja",
+            "binaryDir": "out/build/${presetName}",
+            "installDir": "out/install/${presetName}"
+        },
+        {
+            "name": "relwithdebinfo-std",
+            "displayName": "Standard System RelWithDebInfo Build",
+            "description": "RelWithDebInfo Build",
+            "inherits": "relwithdebinfo-gl",
+            "hidden": false,
+            "generator": "Ninja",
+            "binaryDir": "out/build/${presetName}",
+            "installDir": "out/install/${presetName}"
+        },
+        {
+            "name": "profile-std",
+            "displayName": "Standard System Profiling Build",
+            "description": "Profiling Build",
+            "inherits": "profile-gl",
+            "hidden": false,
+            "generator": "Ninja",
+            "binaryDir": "out/build/${presetName}",
+            "installDir": "out/install/${presetName}"
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "debug-pi4",
+            "description": "Debug Build for Raspberry Pi 4/400",
+            "displayName": "Raspberry Pi 4 Debug Build",
+            "configurePreset": "debug-pi4"
+        },
+        {
+            "name": "relwithdebinfo-pi4",
+            "description": "RelWithDebInfo Build for Raspberry Pi 4/400",
+            "displayName": "Raspberry Pi 4 RelWithDebInfo Build",
+            "configurePreset": "relwithdebinfo-pi4"
+        },
+        {
+            "name": "profile-pi4",
+            "description": "Profile Build for Raspberry Pi 4/400",
+            "displayName": "Raspberry Pi 4 Profile Build",
+            "configurePreset": "profile-pi4"
+        },
+        {
+            "name": "debug-std",
+            "description": "Debug Build",
+            "displayName": "Standard System Debug Build",
+            "configurePreset": "debug-std"
+        },
+        {
+            "name": "relwithdebinfo-std",
+            "description": "RelWithDebInfo Build",
+            "displayName": "Standard System RelWithDebInfo Build",
+            "configurePreset": "relwithdebinfo-std"
+        },
+        {
+            "name": "profile-std",
+            "description": "Profile Build",
+            "displayName": "Standard System Profile Build",
+            "configurePreset": "profile-std"
+        },
+	{
+	    "name": "install-std",
+	    "displayName": "Standard System Installation",
+	    "description": "Install a Release build for Standard Systems",
+	    "inherits": "relwithdebinfo-std",
+	    "targets": [ "all", "install" ]
+	},
+	{
+	    "name": "install-pi4",
+	    "displayName": "Raspbery Pi (or other ARM Linux) Installation",
+	    "description": "Install a Release build for Pi and other ARM Linux Systems",
+	    "inherits": "relwithdebinfo-pi4",
+	    "targets": [ "all", "install" ]
+	}
+    ]
+}

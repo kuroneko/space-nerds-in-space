@@ -1,0 +1,39 @@
+#!/bin/sh
+
+set -f
+
+BASEDIR='@CMAKE_SOURCE_DIR@'
+MODELSRCDIR="${BASEDIR}/share/snis/models"
+DESTDIR="@CMAKE_BINARY_DIR@/modeldata"
+
+extract_scad_params() {
+	local SRCFILE="$1"
+	local DSTFILE="${DESTDIR}/$(basename "$1" .scad).scad_params.h"
+
+	echo "  EXTRACT THRUST PARAMS $(basename "$DSTFILE")"
+	@AWK@ -f "${BASEDIR}/extract_scad_params.awk" "${SRCFILE}" > "${DSTFILE}"
+}
+
+extract_docking_ports() {
+	local SRCFILE="$1"
+	local DSTFILE="${DESTDIR}/$(basename "$1" .scad).docking_ports.h"
+
+	echo "  EXTRACT DOCKING PORTS $(basename "$DSTFILE")"
+	@AWK@ -f "${BASEDIR}/extract_docking_ports.awk" "${SRCFILE}" > "${DSTFILE}"
+}
+
+mkdir -p "${DESTDIR}"
+
+for i in disruptor.scad enforcer.scad starbase5.scad research-vessel.scad \
+      	conqueror.scad cruiser.scad asteroid-miner.scad battlestar.scad \
+        wombat.scad destroyer.scad dragonhawk.scad tanker.scad swordfish.scad \
+  	vanquisher.scad	freighter.scad scrambler.scad spaceship2.scad \
+	spaceship3.scad skorpio.scad spaceship.scad transport.scad \
+	escapepod.scad mantis.scad missile.scad; do
+	extract_scad_params "${MODELSRCDIR}/$i"
+done
+
+for i in starbase.scad starbase2.scad starbase3.scad starbase4.scad starbase5.scad \
+	starbase6.scad; do
+	extract_docking_ports "${MODELSRCDIR}/$i"
+done

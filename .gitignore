@@ -54,3 +54,6 @@ libopus.a
 \#*
 *.bak
 .vscode
+
+# cmake build tree
+/out/**

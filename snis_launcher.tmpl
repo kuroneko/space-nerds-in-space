@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/bash
 
 if [ "$(id -u)" = "0" ]
 then
@@ -20,20 +20,16 @@ then
 fi
 export SNIS_DB_DIR
 
-# Hack this in for now.  Note: the Makefile edits the next two lines with sed
-# so be careful if you change it that the Makefile still edits it correctly.
-# Currently it matches the pattern: '^PREFIX=[.]$' and '^DESTDIR=$'
-PREFIX=.
-DESTDIR=
+PREFIX='@CMAKE_INSTALL_PREFIX@'
 
-BINDIR=${DESTDIR}${PREFIX}/bin
+BINDIR="${PREFIX}/bin"
 if [ "$SNIS_ASSET_DIR" = "" ]
 then
 	if [ "$XDG_DATA_HOME" = "" ]
 	then
-		export SNIS_ASSET_DIR=$HOME/.local/share/space-nerds-in-space/share/snis
+		export SNIS_ASSET_DIR="$HOME/.local/share/space-nerds-in-space/share/snis"
 	else
-		export SNIS_ASSET_DIR=$XDG_DATA_HOME/space-nerds-in-space/share/snis
+		export SNIS_ASSET_DIR="$XDG_DATA_HOME/space-nerds-in-space/share/snis"
 	fi
 	if [ ! -d "$SNIS_ASSET_DIR" ]
 	then
@@ -41,25 +37,21 @@ then
 	fi
 fi
 
-echo $SNIS_ASSET_DIR | grep '[/]share[/]snis$' > /dev/null 2>&1
-if [ "$?" != "0" ]
-then
+SNIS_ASSET_DIR_ROOT="${SNIS_ASSET_DIR/%\/share\/snis/}"
+if [ "${SNIS_ASSET_DIR_ROOT}" = "${SNIS_ASSET_DIR}" ]; then
 	echo "Error: SNIS_ASSET_DIR must end with /share/snis" 1>&2
 	echo "Current value of SNIS_ASSET_DIR is $SNIS_ASSET_DIR" 1>&2
 	echo "Exiting." 1>&2
 	exit 1
 fi
 
-SNIS_ASSET_DIR_ROOT=$(echo $SNIS_ASSET_DIR | sed -e 's/[/]share[/]snis$//')
-
-
 if [ "$SNIS_LOG_DIR" = "" ]
 then
 	if [ "$XDG_DATA_HOME" = "" ]
 	then
-		export SNIS_LOG_DIR=$HOME/.local/share/space-nerds-in-space
+		export SNIS_LOG_DIR="$HOME/.local/share/space-nerds-in-space"
 	else
-		export SNIS_LOG_DIR=$XDG_DATA_HOME/space-nerds-in-space
+		export SNIS_LOG_DIR="$XDG_DATA_HOME/space-nerds-in-space"
 	fi
 else
 	if [ ! -d "$SNIS_LOG_DIR" ]
@@ -80,19 +72,21 @@ then
 	mkdir -p "$SNIS_LOG_DIR"
 fi
 
-SNIS_SERVER=${BINDIR}/snis_server
-SNIS_CLIENT=${BINDIR}/snis_client
-SNIS_MULTIVERSE=${BINDIR}/snis_multiverse
-SSGL_SERVER=${BINDIR}/ssgl_server
-SNIS_UPDATE_ASSETS=${BINDIR}/snis_update_assets
+SNIS_SERVER="${BINDIR}/snis_server"
+SNIS_CLIENT="${BINDIR}/snis_client"
+SNIS_MULTIVERSE="${BINDIR}/snis_multiverse"
+SSGL_SERVER="${BINDIR}/ssgl_server"
+SNIS_UPDATE_ASSETS="${BINDIR}/snis_update_assets"
 ASPECT_RATIO="${ASPECT_RATIO:-}"
 LOBBYHOST=localhost
 # ASPECT_RATIO="5:4"
 # ASPECT_RATIO="4:3"
 # ASPECT_RATIO="16:10"
 # ASPECT_RATIO="16:9"
-TRAP_NANS=
-# TRAP_NANS=--trap-nans
+declare -a TRAP_NANS ASPECT_RATIO_ARG
+TRAP_NANS=()
+ASPECT_RATIO_ARG=()
+# TRAP_NANS=("--trap-nans")
 SPLASH_SCREEN="ENABLED"
 
 # change to --no-textures to run without textures
@@ -104,9 +98,7 @@ ENABLE_ENSCRIPT=
 
 if [ "$ASPECT_RATIO" != "" ]
 then
-	ASPECT_RATIO_ARG="--aspect-ratio $ASPECT_RATIO"
-else
-	ASPECT_RATIO_ARG=""
+	ASPECT_RATIO_ARG+=("--aspect-ratio" "$ASPECT_RATIO")
 fi
 
 SOLARSYSTEM_NAME="default"
@@ -126,8 +118,8 @@ check_for_unexpected_lockdir()
 {
 	if [ -d "$1" ]
 	then
-		printf "\nUnexpected lock directory $1 found.\n" 1>&2
-		printf "Perhaps the server process $2 is already running. If not, perhaps\n" 1>&1
+		printf "\nUnexpected lock directory %s found.\n" "$1" 1>&2
+		printf "Perhaps the server process %s is already running. If not, perhaps\n" "$2" 1>&1
 		printf "it crashed and if so, then this lock directory should be removed.\n\n" 1>&2
 	fi
 }
@@ -216,16 +208,17 @@ EOF
 kill_processes()
 {
 	pattern="$1"
-	p=$(ps ax -o pid,cmd | grep -E "$pattern" | grep -v 'grep')
-	if [ "$p" = "" ]
+	if ! pgrep -- "$pattern"
 	then
 		printf "There are no processes to kill.\n"
 		return
-	else
-		printf "\n\n%s\n" "$p"
 	fi
-	ps ax -o pid,cmd | grep -E "$pattern" | grep -v 'grep' | awk '{ printf("kill %s\n", $1); }' | /bin/sh
-	printf "\nKilled the above processes.\n"
+	pgrep -- "$pattern" | (
+		while read -r TGTPID; do
+			kill "${TGTPID}"
+			echo "Killed pid ${TGTPID}"
+		done
+	)
 	sleep 0.25
 }
 
@@ -244,8 +237,7 @@ check_for_binary()
 
 start_snis_lobby()
 {
-	check_for_binary "${SSGL_SERVER}"
-	if [ "$?" != "0" ]
+	if ! check_for_binary "${SSGL_SERVER}"
 	then
 		return
 	fi
@@ -270,18 +262,18 @@ start_snis_lobby()
 start_snis_multiverse()
 {
 	local autowrangle=
-	local exempt=
+	declare -a exempt PORT_RANGE_OPT
 
-	check_for_binary "${SNIS_MULTIVERSE}"
-	if [ "$?" != "0" ]
+	exempt=()
+	PORT_RANGE_OPT=()
+
+	if ! check_for_binary "${SNIS_MULTIVERSE}"
 	then
 		return
 	fi
 	if [ "$SNIS_SERVER_PORT_RANGE" != "" ]
 	then
-		PORT_RANGE_OPT="--snis-server-portrange $SNIS_SERVER_PORT_RANGE"
-	else
-		PORT_RANGE_OPT=""
+		PORT_RANGE_OPT+=("--snis-server-portrange" "${SNIS_SERVER_PORT_RANGE}")
 	fi
 	printf "Automatically start/stop snis_server instances as needed (y/n, default = y)?"
 	read -r x
@@ -289,19 +281,18 @@ start_snis_multiverse()
 	then
 		printf "\nWhich solarsystem should be exempted from being automatically stopped?\n"
 		get_solarsystem_name
-		exempt="-e $SOLARSYSTEM_NAME"
+		exempt+=("-e" "$SOLARSYSTEM_NAME")
 		autowrangle=-a
 		printf "Exempting solarsystem %s from auto-stopping.\n" "$SOLARSYSTEM_NAME"
 	else
 		autowrangle=
-		exempt=
 	fi
 
 	if [ ! -d "$SNIS_DB_DIR"/snisdb ]
 	then
 		printf "%s/snisdb/ does not exist, creating directory.\n" "$SNIS_DB_DIR" 1>&2
-		mkdir -p "$SNIS_DB_DIR"/snisdb
-		if [ "$?" != "0" ]
+
+		if ! mkdir -p "${SNIS_DB_DIR}/snisdb"
 		then
 			printf "mkdir %s/snisdb failed.\n" "$SNIS_DB_DIR"
 		fi
@@ -314,9 +305,9 @@ start_snis_multiverse()
 		printf "Created %s/snisdb for snis_multiverse\n" "$SNIS_DB_DIR" 1>&2
 	fi
 	check_for_unexpected_lockdir /tmp/snis_multiverse_lock snis_multiverse
-	(${SNIS_MULTIVERSE} $autowrangle -l "${LOBBYHOST}" -n nickname -L narnia $exempt \
-		$PORT_RANGE_OPT > "$SNIS_LOG_DIR"/snis_multiverse_log.txt 2>&1 ; \
-		printf "snis_multiverse died, status was %s\n" "$?" 1>&2 ) &
+	("${SNIS_MULTIVERSE}" $autowrangle -l "${LOBBYHOST}" -n nickname -L narnia "${exempt[@]}" \
+		"${PORT_RANGE_OPT[@]}" > "${SNIS_LOG_DIR}/snis_multiverse_log.txt" 2>&1 ; \
+		printf "snis_multiverse died, status was %d\n" "$?" 1>&2 ) &
 }
 
 get_solarsystem_name()
@@ -327,7 +318,7 @@ get_solarsystem_name()
 		dname="."
 
 		printf "Choose a solar system:\n"
-		for ss in ${SNIS_ASSET_DIR}/solarsystems/*/assets.txt
+		for ss in "${SNIS_ASSET_DIR}"/solarsystems/*/assets.txt
 		do
 			dname=$(dirname "$ss")
 			name=$(basename "$dname")
@@ -339,14 +330,14 @@ get_solarsystem_name()
 		then
 			ssname="$default"
 		fi
-		if [ ! -f "${SNIS_ASSET_DIR}/solarsystems/$ssname"/assets.txt ]
+		if [ ! -f "${SNIS_ASSET_DIR}/solarsystems/${ssname}/assets.txt" ]
 		then
 			printf "Invalid choice: %s\n" "$ssname"
 		else
 			break;
 		fi
 	done
-	if [ -d ${SNIS_ASSET_DIR}/solarsystems/"$ssname" -a -f ${SNIS_ASSET_DIR}/solarsystems/"$ssname"/assets.txt ]
+	if [ -d "${SNIS_ASSET_DIR}/solarsystems/${ssname}" ] && [ -f "${SNIS_ASSET_DIR}/solarsystems/${ssname}/assets.txt" ]
 	then
 		SOLARSYSTEM_NAME="$ssname"
 	else
@@ -361,17 +352,17 @@ uppercase()
 
 start_snis_server()
 {
-	check_for_binary "${SNIS_SERVER}"
-	if [ "$?" != "0" ]
+	if ! check_for_binary "${SNIS_SERVER}"
 	then
 		return
 	fi
 
+	declare -a PORT_RANGE_OPT
+	PORT_RANGE_OPT=()
+
 	if [ "$SNIS_SERVER_PORT_RANGE" != "" ]
 	then
-		PORT_RANGE_OPT="--portrange $SNIS_SERVER_PORT_RANGE"
-	else
-		PORT_RANGE_OPT=""
+		PORT_RANGE_OPT+=("--portrange" "${SNIS_SERVER_PORT_RANGE}")
 	fi
 	printf "\nStarting snis_server\n\n"
 	get_solarsystem_name
@@ -380,15 +371,14 @@ start_snis_server()
 	UPPER_SS1=$(uppercase "$SS1")
 	check_for_unexpected_lockdir /tmp/snis_server_lock."$UPPER_SS1" "snis_server $SS1"
 	${SNIS_SERVER} -l "${LOBBYHOST}" -L "$UPPER_SS1" -m narnia -s "$SS1" \
-		${ENABLE_ENSCRIPT} ${TRAP_NANS} ${PORT_RANGE_OPT} > \
+		${ENABLE_ENSCRIPT} "${TRAP_NANS[@]}" "${PORT_RANGE_OPT[@]}" > \
 		"$SNIS_LOG_DIR"/snis_server_log.txt 2>&1 &
 	sleep 2.5
 }
 
 start_snis_client()
 {
-	check_for_binary "${SNIS_CLIENT}"
-	if [ "$?" != "0" ]
+	if ! check_for_binary "${SNIS_CLIENT}"
 	then
 		return
 	fi
@@ -400,8 +390,8 @@ start_snis_client()
 		SPLASH_SCREEN_OPTION=""
 	fi
 	CLIENT="$1"
-	${CLIENT} --lobbyhost "${LOBBYHOST}" $ASPECT_RATIO_ARG --fullscreen --no-launcher \
-		${TRAP_NANS} ${SPLASH_SCREEN_OPTION} ${NO_TEXTURES} > "$SNIS_LOG_DIR"/snis_client_log.txt 2>&1 &
+	"${CLIENT}" --lobbyhost "${LOBBYHOST}" "${ASPECT_RATIO_ARG[@]}" --fullscreen --no-launcher \
+		"${TRAP_NANS[@]}" ${SPLASH_SCREEN_OPTION} ${NO_TEXTURES} > "$SNIS_LOG_DIR"/snis_client_log.txt 2>&1 &
 	sleep 1
 	# --starship "$shipname" --pw "$password" $@
 }
@@ -440,7 +430,7 @@ reformat_processes()
 show_snis_processes()
 {
 	printf "%s\n" "------------------------------------------------------------"
-	p=$(ps ax -o pid,cmd | grep -E 'snis_multiverse|snis_server|snis_client|ssgl_server' | grep -v grep)
+	p=$(pgrep -a -- 'snis_multiverse|snis_server|snis_client|ssgl_server')
 	if [ "$p" = "" ]
 	then
 		printf "No SNIS processes are currently running.\n"
@@ -463,7 +453,7 @@ check_for_bad_lockfiles()
 			continue;
 		fi
 		instancename=$(printf "%s\n" "$x" | sed -e 's/.*[.]//')
-		ps ax -o pid,cmd | grep -E snis_server | grep "[-]L $instancename[ ]" > /dev/null 2>&1
+		pgrep -a -- snis_server | grep "[-]L ${instancename}[ ]" > /dev/null 2>&1
 		if [ "$?" = "1" ]
 		then
 			printf "\n" 1>&2
@@ -476,13 +466,12 @@ check_for_bad_lockfiles()
 
 check_for_ip_address()
 {
-	check_for_binary "${SSGL_SERVER}"
-	if [ "$?" != "0" ]
+	if ! check_for_binary "${SSGL_SERVER}"
 	then
 		exit 1
 	fi
 	ipaddr=$(${SSGL_SERVER} --find-ip-address 2>/dev/null)
-	if [ "$ipaddr" = "" -o "$ipaddr" = "0.0.0.0" ]
+	if [ -z "${ipaddr}" ] || [ "${ipaddr}" = "0.0.0.0" ]
 	then
 		printf "Failed to find primary IP address.\n" 1>&2
 		printf "You might need to set SSGL_PRIMARY_IP_PROBE_ADDR\n" 1>&2
@@ -585,18 +574,19 @@ do_exit()
 	if [ "$CONTAINER_TYPE" != "" ]
 	then
 		local pattern="snis_server|snis_multiverse|snis_client|ssgl_server"
-		p=$(ps ax -o pid,cmd | grep -E "$pattern" | grep -v 'grep')
+
+		p=$(pgrep -a -- "$pattern")
 		if [ "$p" != "" ]
 		then
-			printf "\n\nSNIS processes are still running in this $CONTAINER_TYPE container\n\n"
+			printf "\n\nSNIS processes are still running in this %s container\n\n" "$CONTAINER_TYPE"
 			printf "%s" "$p"
 			printf "\n\n\n"
 			printf "If you exit now, those processes will continue, but become inaccessible\n"
 			printf "Do you REALLY want to quit? (y/n) "
-			read answer
-			if [ "$answer" = "y" -o "$answer" = "Y" ]
+			read -r answer
+			if [ "${answer}" = "y" ] || [ "${answer}" = "Y" ]
 			then
-				printf "OK, here is a shell in the $CONTAINER_TYPE container. When\n"
+				printf "OK, here is a shell in the %s container. When\n" "$CONTAINER_TYPE"
 				printf "you exit this shell, you will exit the container.\n\n"
 				/usr/bin/sh
 			else
@@ -620,13 +610,13 @@ check_for_asset_updates()
 	if [ -f "${SNIS_DB_DIR}/last_asset_update_time.txt" ]
 	then
 		# Make sure date supports +%s, some very old ones don't.
-		date '+%s' | grep '^[0-9][0-9]*$' > /dev/null 2>&1
-		if [ "$?" = "0" ]
+
+		if date '+%s' | grep '^[0-9][0-9]*$' > /dev/null 2>&1
 		then
 
-			LAST_ASSET_CHK_TIME=$(cat ${SNIS_DB_DIR}/last_asset_update_time.txt)
-			THIS_ASSET_CHK_TIME=$(date '+%s')
-			SECONDS_SINCE=$(expr "$THIS_ASSET_CHK_TIME" - "$LAST_ASSET_CHK_TIME")
+			LAST_ASSET_CHK_TIME="$(cat "${SNIS_DB_DIR}/last_asset_update_time.txt")"
+			THIS_ASSET_CHK_TIME="$(date '+%s')"
+			SECONDS_SINCE=$(("$THIS_ASSET_CHK_TIME" - "$LAST_ASSET_CHK_TIME"))
 
 			# If less than 24 hours, gently suggest not checking again right now.
 
@@ -638,7 +628,7 @@ check_for_asset_updates()
 				read -r x
 
 
-				if [ "$x" != "Y" -a "$x" != "y" ]
+				if [ "${x}" != "Y" ] && [ "${x}" != "y" ]
 				then
 					return;
 				fi
@@ -648,11 +638,11 @@ check_for_asset_updates()
 
 	# copy local assets first
 	echo "Updating local assets..."
-	echo "Changing to ${DESTDIR}${PREFIX}"
-	cd ${DESTDIR}${PREFIX}
-	if [ "$?" != "0" ]
+	echo "Changing to ${PREFIX}"
+
+	if ! cd "${PREFIX}"
 	then
-		echo "Failed to cd to ${DESTDIR}${PREFIX}" 1>&2
+		echo "Failed to cd to ${PREFIX}" 1>&2
 		return
 	fi
 

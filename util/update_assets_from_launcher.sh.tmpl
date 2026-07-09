@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/bash
 
 # This script is meant to be invoked only by snis_client
 
@@ -27,7 +27,7 @@ do
 	shift;
 done
 
-if [ "$(id -u)" = "0" ]
+if [ "${UID}" = "0" ] || [ "${EUID}" = "0" ]
 then
 	printf "You are root. Do not run this script as root.\n" 1>&2
 	exit 1
@@ -35,7 +35,7 @@ fi
 
 if [ "$SNIS_DB_DIR" = "" ]
 then
-	if [ "$XDG_DATA_HOME" != "" -a -d "$XDG_DATA_HOME" ]
+	if [ "$XDG_DATA_HOME" != "" ] && [ -d "$XDG_DATA_HOME" ]
 	then
 		SNIS_DB_DIR="$XDG_DATA_HOME/space-nerds-in-space"
 	else
@@ -51,10 +51,9 @@ export SNIS_DB_DIR
 # Hack this in for now.  Note: the Makefile edits the next two lines with sed
 # so be careful if you change it that the Makefile still edits it correctly.
 # Currently it matches the pattern: '^PREFIX=[.]$' and '^DESTDIR=$'
-PREFIX=.
-DESTDIR=
+PREFIX='@PREFIX@'
 
-BINDIR=${DESTDIR}${PREFIX}/bin
+BINDIR="${PREFIX}/bin"
 
 if [ "$SNIS_ASSET_DIR" = "" ]
 then
@@ -70,32 +69,27 @@ then
 	fi
 fi
 
-echo $SNIS_ASSET_DIR | grep '[/]share[/]snis$' > /dev/null 2>&1
-if [ "$?" != "0" ]
-then
+
+SNIS_ASSET_DIR_ROOT="${SNIS_ASSET_DIR/%\/share\/snis/}"
+if [ "${SNIS_ASSET_DIR_ROOT}" = "${SNIS_ASSET_DIR}" ]; then
 	echo "Error: SNIS_ASSET_DIR must end with /share/snis" 1>&2
 	echo "Current value of SNIS_ASSET_DIR is $SNIS_ASSET_DIR" 1>&2
 	echo "Exiting." 1>&2
 	exit 1
 fi
 
-SNIS_ASSET_DIR_ROOT=$(echo $SNIS_ASSET_DIR | sed -e 's/[/]share[/]snis$//')
+PREFIX='@PREFIX@'
 
-DESTDIR=
-PREFIX=.
-
-SNIS_UPDATE_ASSETS=${BINDIR}/snis_update_assets
+SNIS_UPDATE_ASSETS="${BINDIR}/snis_update_assets"
 
 if [ -f "${SNIS_ASSET_DIR_ROOT}/last_asset_update_time.txt" ]
 then
 	# Make sure date supports +%s, some very old ones don't.
-	date '+%s' | grep '^[0-9][0-9]*$' > /dev/null 2>&1
-	if [ "$?" = "0" ]
+	if date '+%s' | grep '^[0-9][0-9]*$' > /dev/null 2>&1
 	then
-
-		LAST_ASSET_CHK_TIME=$(cat ${SNIS_ASSET_DIR_ROOT}/last_asset_update_time.txt)
-		THIS_ASSET_CHK_TIME=$(date '+%s')
-		SECONDS_SINCE=$(expr "$THIS_ASSET_CHK_TIME" - "$LAST_ASSET_CHK_TIME")
+		LAST_ASSET_CHK_TIME="$(cat "${SNIS_ASSET_DIR_ROOT}/last_asset_update_time.txt")"
+		THIS_ASSET_CHK_TIME="$(date '+%s')"
+		SECONDS_SINCE="$((THIS_ASSET_CHK_TIME - LAST_ASSET_CHK_TIME))"
 
 		# If less than 24 hours, gently suggest not checking again right now.
 
@@ -108,7 +102,7 @@ then
 
 				read -r x
 
-				if [ "$x" != "Y" -a "$x" != "y" ]
+				if [ "$x" != "Y" ] && [ "$x" != "y" ]
 				then
 					exit 0;
 				fi
@@ -129,12 +123,12 @@ date > "$SNIS_DB_DIR"/snis_downloading.txt
 
 # copy local assets first
 echo "Updating local assets..."
-echo "Changing directory to ${DESTDIR}${PREFIX}"
+echo "Changing directory to ${PREFIX}"
 
-cd ${DESTDIR}${PREFIX}
-if [ "$?" != 0 ]
+
+if ! cd "${PREFIX}"
 then
-	echo "Failed to cd to ${DESTDIR}${PREFIX}" 1>&2
+	echo "Failed to cd to ${PREFIX}" 1>&2
 	cleanup
 	exit 1
 fi
